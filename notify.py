@@ -1,0 +1,583 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = [
+#     "pync",
+#     "requests", 
+#     "python-dotenv",
+#     "kokoro-onnx",
+#     "pydub",
+#     "soundfile",
+#     "tqdm"
+# ]
+# ///
+
+"""
+CCNotify - Intelligent notification system for Claude Code with audio feedback
+Enhanced version with modular TTS provider system
+"""
+
+import json
+import sys
+import os
+import subprocess
+import hashlib
+import datetime
+import logging
+import time
+import glob
+import re
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+
+try:
+    import pync
+    import requests
+    from pydub import AudioSegment
+    from pydub.playback import play
+    from dotenv import load_dotenv
+except ImportError:
+    # Dependencies will be auto-installed via uv
+    pass
+
+# Import our TTS provider system
+try:
+    from ccnotify.tts import get_tts_provider, TTSProvider
+except ImportError:
+    # Fallback for standalone usage
+    get_tts_provider = None
+    TTSProvider = None
+
+# Configuration
+BASE_DIR = Path.home() / ".claude" / "hooks"
+SOUNDS_DIR = BASE_DIR / "sounds"
+LOGS_DIR = BASE_DIR / "logs"
+CACHE_FILE = BASE_DIR / "session_project_cache.json"
+REPLACEMENTS_FILE = BASE_DIR / "replacements.json"
+PENDING_COMMANDS_FILE = BASE_DIR / "pending_commands_cache.json"
+PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Environment variables (will be reloaded in main() if .env exists)
+USE_TTS = os.getenv("USE_TTS", "false").lower() == "true"
+USE_LOGGING = os.getenv("USE_LOGGING", "false").lower() == "true"
+TTS_PROVIDER = os.getenv("TTS_PROVIDER", "macos_say")  # Options: macos_say, elevenlabs, kokoro
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel
+ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")  # Flash 2.5
+KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
+KOKORO_PATH = os.getenv("KOKORO_PATH", "/Users/helmi/.claude/hooks/kokoro-tts")
+KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")  # Speed multiplier (0.5-2.0)
+
+# Create a no-op logger class for when logging is disabled
+class NoOpLogger:
+    def debug(self, msg, *args, **kwargs): pass
+    def info(self, msg, *args, **kwargs): pass
+    def warning(self, msg, *args, **kwargs): pass
+    def error(self, msg, *args, **kwargs): pass
+    def critical(self, msg, *args, **kwargs): pass
+
+# Setup logging (will be configured properly in setup_logging())
+logger = NoOpLogger()
+
+# Cache settings
+CACHE_EXPIRY_DAYS = 7  # Keep cache entries for 7 days
+
+
+def setup_logging():
+    """Setup logging based on USE_LOGGING environment variable"""
+    global logger
+    
+    if USE_LOGGING:
+        # Create logs directory only if logging is enabled
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        log_file = LOGS_DIR / f"notifications_{datetime.datetime.now().strftime('%Y%m%d')}.log"
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler(sys.stderr)
+            ],
+            force=True  # Force reconfiguration
+        )
+        logger = logging.getLogger(__name__)
+        logger.info("Logging enabled")
+    else:
+        # Keep the no-op logger
+        logger = NoOpLogger()
+
+
+def load_project_cache() -> Dict[str, Dict[str, Any]]:
+    """Load the project cache from disk"""
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load cache: {e}")
+    return {}
+
+
+def save_project_cache(cache: Dict[str, Dict[str, Any]]):
+    """Save the project cache to disk"""
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save cache: {e}")
+
+
+def clean_old_cache_entries(cache: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Remove cache entries older than CACHE_EXPIRY_DAYS"""
+    current_time = time.time()
+    expiry_seconds = CACHE_EXPIRY_DAYS * 24 * 60 * 60
+    
+    cleaned_cache = {}
+    for session_id, data in cache.items():
+        if current_time - data.get('timestamp', 0) < expiry_seconds:
+            cleaned_cache[session_id] = data
+    
+    return cleaned_cache
+
+
+def resolve_project_name(session_id: str) -> str:
+    """Resolve project name from session ID"""
+    # Load and clean cache
+    cache = load_project_cache()
+    cache = clean_old_cache_entries(cache)
+    
+    # Check if we have a cached result
+    if session_id in cache:
+        logger.debug(f"Found cached project name for session {session_id}: {cache[session_id]['project_name']}")
+        return cache[session_id]['project_name']
+    
+    # Search for the session file in project folders
+    try:
+        session_file = f"{session_id}.jsonl"
+        pattern = str(PROJECTS_DIR / "*" / session_file)
+        matches = glob.glob(pattern)
+        
+        if matches:
+            # Get the first match (should only be one)
+            project_path = Path(matches[0]).parent
+            folder_name = project_path.name
+            
+            # Extract project name from folder
+            # Format is usually like: -Users-helmi-code-synapsa
+            # We want the last part: synapsa
+            parts = folder_name.split('-')
+            
+            # Find the last meaningful part (skip empty parts)
+            project_name = "unknown"
+            for i in range(len(parts) - 1, -1, -1):
+                if parts[i] and not parts[i].lower() in ['users', 'home', 'code', 'projects', 'documents']:
+                    project_name = parts[i]
+                    break
+            
+            # Cache the result
+            cache[session_id] = {
+                'project_name': project_name,
+                'timestamp': time.time(),
+                'full_path': str(project_path)
+            }
+            save_project_cache(cache)
+            
+            logger.debug(f"Resolved project name for session {session_id}: {project_name}")
+            return project_name
+            
+    except Exception as e:
+        logger.warning(f"Error resolving project name: {e}")
+    
+    return "unknown"
+
+
+def load_replacements() -> Dict[str, Any]:
+    """Load replacements configuration"""
+    if REPLACEMENTS_FILE.exists():
+        try:
+            with open(REPLACEMENTS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load replacements: {e}")
+    return {
+        "project_names": {"replacements": {}},
+        "commands": {"replacements": {}},
+        "patterns": {"replacements": []}
+    }
+
+
+def apply_project_name_replacement(project_name: str, replacements: Dict[str, Any]) -> str:
+    """Apply project name replacement"""
+    project_replacements = replacements.get("project_names", {}).get("replacements", {})
+    
+    # Case-insensitive matching
+    for original, replacement in project_replacements.items():
+        if project_name.lower() == original.lower():
+            return replacement
+    
+    return project_name
+
+
+def apply_command_replacement(command: str, replacements: Dict[str, Any]) -> str:
+    """Apply command replacement for audio"""
+    cmd_replacements = replacements.get("commands", {}).get("replacements", {})
+    pattern_replacements = replacements.get("patterns", {}).get("replacements", [])
+    
+    # First check pattern replacements
+    for pattern_config in pattern_replacements:
+        pattern = pattern_config.get("pattern", "")
+        replacement = pattern_config.get("replacement", "")
+        if pattern and replacement:
+            match = re.search(pattern, command, re.IGNORECASE)
+            if match:
+                # Handle group replacements like $1
+                result = replacement
+                for i, group in enumerate(match.groups(), 1):
+                    result = result.replace(f"${i}", group)
+                return result
+    
+    # Then check direct command replacements
+    cmd_parts = command.split()
+    if cmd_parts:
+        base_cmd = cmd_parts[0]
+        if base_cmd in cmd_replacements:
+            return cmd_replacements[base_cmd]
+    
+    # Return the original command if no replacement found
+    return f"running {cmd_parts[0]}" if cmd_parts else "running command"
+
+
+class NotificationHandler:
+    def __init__(self):
+        self.sounds_cache = {}
+        self.tts_provider = None
+        self._init_tts_provider()
+        
+    def _init_tts_provider(self):
+        """Initialize TTS provider"""
+        if not USE_TTS or not get_tts_provider:
+            logger.debug("TTS disabled or provider system not available")
+            return
+            
+        try:
+            # Build TTS configuration
+            tts_config = {
+                "provider": TTS_PROVIDER,
+                "models_dir": "models",  # Use project-relative models directory
+                # Kokoro config
+                "voice": KOKORO_VOICE,
+                "speed": KOKORO_SPEED,
+                # ElevenLabs config
+                "api_key": ELEVENLABS_API_KEY,
+                "voice_id": ELEVENLABS_VOICE_ID,
+                "model_id": ELEVENLABS_MODEL_ID,
+            }
+            
+            self.tts_provider = get_tts_provider(TTS_PROVIDER, tts_config, fallback=True)
+            if self.tts_provider:
+                logger.info(f"Initialized TTS provider: {TTS_PROVIDER}")
+            else:
+                logger.warning("No TTS provider available")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize TTS provider: {e}")
+            self.tts_provider = None
+        
+    def notify(self, title: str, message: str, sound_name: str = "Glass"):
+        """Display macOS notification - simple and clean"""
+        try:
+            pync.notify(
+                message=message,
+                title=title,
+                sound=sound_name
+            )
+        except Exception as e:
+            logger.error(f"Failed to send notification: {e}")
+    
+    def play_sound_file(self, sound_path: Path):
+        """Play a sound file using macOS afplay"""
+        if sound_path.exists():
+            try:
+                subprocess.Popen(["afplay", str(sound_path)])
+            except Exception as e:
+                logger.error(f"Failed to play sound: {e}")
+    
+    def get_notification_sound(self, event_type: str, custom_text: str = "") -> Optional[Path]:
+        """Get or generate sound for notification"""
+        if not USE_TTS or not self.tts_provider:
+            return self._get_fallback_sound(event_type)
+        
+        # Default texts for each event type
+        default_texts = {
+            "tool_activity": "Tool activity",
+            "execution_complete": "Task complete", 
+            "subagent_done": "Sub agent done",
+            "error": "Error occurred",
+            "tool_blocked": "Tool blocked",
+            "compaction": "Compacting context",
+            "input_needed": "Input needed"
+        }
+        
+        # Determine text to speak
+        text_to_speak = custom_text if custom_text else default_texts.get(event_type, "Claude notification")
+        
+        # Generate cache key and file path
+        cache_key = self.tts_provider.get_cache_key(text_to_speak)
+        file_extension = self.tts_provider.get_file_extension()
+        sound_file = SOUNDS_DIR / f"{TTS_PROVIDER}_{event_type}_{cache_key}{file_extension}"
+        
+        # Use cached file if exists
+        if sound_file.exists():
+            logger.debug(f"Using cached {TTS_PROVIDER} sound: {sound_file}")
+            return sound_file
+        
+        # Generate new sound file
+        try:
+            success = self.tts_provider.generate(text_to_speak, sound_file)
+            if success:
+                logger.info(f"Generated {TTS_PROVIDER} TTS: {text_to_speak}")
+                return sound_file
+            else:
+                logger.warning(f"TTS generation failed, using fallback")
+                return self._get_fallback_sound(event_type)
+        
+        except Exception as e:
+            logger.error(f"TTS generation error: {e}")
+            return self._get_fallback_sound(event_type)
+    
+    def _get_fallback_sound(self, event_type: str) -> Optional[Path]:
+        """Get fallback sound using macOS say command"""
+        default_texts = {
+            "tool_activity": "Tool activity",
+            "execution_complete": "Task complete", 
+            "subagent_done": "Sub agent done",
+            "error": "Error occurred",
+            "tool_blocked": "Tool blocked",
+            "compaction": "Compacting context",
+            "input_needed": "Input needed"
+        }
+        
+        sound_file = SOUNDS_DIR / f"{event_type}.aiff"
+        
+        if not sound_file.exists():
+            text = default_texts.get(event_type, "Claude notification")
+            try:
+                subprocess.run([
+                    "say", "-o", str(sound_file),
+                    "--file-format=AIFF",
+                    "-v", "Samantha",
+                    text
+                ], check=True)
+                logger.debug(f"Generated fallback TTS file: {sound_file}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Failed to generate fallback TTS: {e}")
+                return None
+        
+        return sound_file if sound_file.exists() else None
+    
+    def handle_hook(self, hook_data: Dict[str, Any]):
+        """Process hook data and generate appropriate notification"""
+        hook_type = hook_data.get("hook_event_name", "unknown")
+        logger.info(f"Processing hook type: {hook_type}")
+        
+        # Log all available fields for this hook type
+        logger.debug(f"Available fields: {list(hook_data.keys())}")
+        
+        event_type = None
+        message = None
+        custom_tts = None
+        
+        # Load replacements configuration
+        replacements = load_replacements()
+        
+        # Extract session context
+        session_id = hook_data.get("session_id", "unknown")
+        project_name = resolve_project_name(session_id)
+        
+        # Apply project name replacement
+        display_project_name = apply_project_name_replacement(project_name, replacements)
+        
+        cwd = Path(hook_data.get("cwd", "")).name or "unknown"
+        
+        if hook_type == "PreToolUse":
+            tool_name = hook_data.get("tool_name", "unknown")
+            
+            # Only notify for truly dangerous operations
+            # Skip notifications for common safe operations
+            if tool_name == "Bash":
+                command = hook_data.get("tool_input", {}).get("command", "")
+                # Skip common safe commands
+                safe_prefixes = ["echo", "pwd", "ls", "cat", "head", "tail", "grep", "find", "which"]
+                if any(command.strip().startswith(prefix) for prefix in safe_prefixes):
+                    return  # Skip notification
+                    
+                # Only notify for potentially dangerous commands
+                dangerous_prefixes = ["rm", "mv", "cp", "sudo", "chmod", "chown", ">", "curl", "wget"]
+                if any(prefix in command for prefix in dangerous_prefixes):
+                    event_type = "tool_activity"
+                    # Extract the command and first argument for cleaner message
+                    cmd_parts = command.split()
+                    cmd_summary = cmd_parts[0] if cmd_parts else "command"
+                    if len(cmd_parts) > 1 and cmd_parts[1]:
+                        # Get just the filename/target, not full path
+                        target = Path(cmd_parts[1]).name if '/' in cmd_parts[1] else cmd_parts[1]
+                        message = f"[{display_project_name}] Running {cmd_summary} on {target}"
+                    else:
+                        message = f"[{display_project_name}] Running {cmd_summary}"
+                    
+                    # Apply command replacement for audio
+                    audio_command_desc = apply_command_replacement(command, replacements)
+                    custom_tts = f"{display_project_name}, {audio_command_desc}"
+            
+            # Skip most file edits unless they're system files
+            elif tool_name in ["Write", "MultiEdit", "Edit"]:
+                file_path = hook_data.get("tool_input", {}).get("file_path", "")
+                # Only notify for system/config files
+                if any(x in file_path for x in ["/etc/", "/usr/", ".env", "config", "secret"]):
+                    event_type = "tool_activity"
+                    file_name = Path(file_path).name
+                    message = f"[{display_project_name}] Editing {file_name}"
+                    custom_tts = f"{display_project_name}, editing {file_name}"
+        
+        elif hook_type == "PostToolUse":
+            # Check for errors in tool response
+            tool_response = hook_data.get("tool_response", {})
+            tool_name = hook_data.get("tool_name", "unknown")
+            
+            # Debug log the tool response structure
+            logger.debug(f"PostToolUse response for {tool_name}: {json.dumps(tool_response, indent=2) if isinstance(tool_response, dict) else tool_response}")
+            
+            # Check if response indicates an error (type: "error" or has error field)
+            if (isinstance(tool_response, dict) and 
+                (tool_response.get("type") == "error" or "error" in tool_response)):
+                event_type = "error"
+                error_msg = tool_response.get("error", tool_response.get("message", "Unknown error"))
+                message = f"[{display_project_name}] Error in {tool_name}: {str(error_msg)[:100]}"
+                custom_tts = f"{display_project_name}, {tool_name} failed"
+        
+        elif hook_type == "Stop":
+            event_type = "execution_complete"
+            message = f"[{display_project_name}] Task complete"
+            custom_tts = f"{display_project_name}, task complete"
+        
+        elif hook_type == "SubagentStop":
+            event_type = "subagent_done"
+            message = f"[{display_project_name}] Subagent finished"
+            custom_tts = f"{display_project_name}, sub agent done"
+        
+        elif hook_type == "PreCompact":
+            event_type = "compaction"
+            message = "Context compaction starting"
+        
+        elif hook_type == "Notification":
+            # Handle user input/confirmation needed scenarios
+            notif_type = hook_data.get("notification_type", "")
+            raw_message = hook_data.get("message", "")
+            
+            if "error" in notif_type.lower():
+                event_type = "error"
+                message = hook_data.get("message", "An error occurred")
+            else:
+                # This is likely a permission/confirmation request
+                event_type = "input_needed"
+                
+                # Extract what Claude needs permission for
+                if "permission to use" in raw_message:
+                    # Extract tool name from "Claude needs your permission to use [Tool]"
+                    tool_match = re.search(r"permission to use (\w+)", raw_message)
+                    if tool_match:
+                        tool_requested = tool_match.group(1)
+                        message = f"[{display_project_name}] Permission needed for {tool_requested}"
+                        custom_tts = f"{display_project_name}, needs permission for {tool_requested}"
+                    else:
+                        message = f"[{display_project_name}] {raw_message}"
+                        custom_tts = f"{display_project_name}, {raw_message}"
+                else:
+                    message = f"[{display_project_name}] Input needed"
+                    custom_tts = f"{display_project_name}, input needed"
+        
+        # Send notification if we have an event
+        if event_type and message:
+            logger.info(f"Sending notification: event_type={event_type}, message={message}")
+            
+            # Extract the actual message without the project prefix
+            clean_message = message.split('] ', 1)[-1] if '] ' in message else message
+            
+            # Simple and clean: project as title, message as content
+            self.notify(
+                title=display_project_name, 
+                message=clean_message
+            )
+            
+            # Play sound if available
+            sound_file = self.get_notification_sound(event_type, custom_tts or "")
+            if sound_file:
+                logger.info(f"Playing sound: {sound_file}")
+                self.play_sound_file(sound_file)
+        else:
+            logger.debug(f"No notification sent: event_type={event_type}, message={message}")
+
+
+def main():
+    """Main notification handler entry point"""
+    # Load .env file if available
+    try:
+        env_file = BASE_DIR / ".env"
+        if env_file.exists():
+            load_dotenv(env_file)
+            # Re-read environment variables after loading .env
+            global USE_TTS, USE_LOGGING, TTS_PROVIDER, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID, KOKORO_VOICE, KOKORO_PATH, KOKORO_SPEED
+            USE_TTS = os.getenv("USE_TTS", "false").lower() == "true"
+            USE_LOGGING = os.getenv("USE_LOGGING", "false").lower() == "true"
+            TTS_PROVIDER = os.getenv("TTS_PROVIDER", "macos_say")
+            ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+            ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+            ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
+            KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
+            KOKORO_PATH = os.getenv("KOKORO_PATH", "/Users/helmi/.claude/hooks/kokoro-tts")
+            KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")
+    except ImportError:
+        pass
+    
+    # Setup logging based on environment variable
+    setup_logging()
+    
+    handler = NotificationHandler()
+    
+    # Check if running interactively (for testing)
+    if sys.stdin.isatty():
+        # Test mode
+        if len(sys.argv) > 1:
+            event_type = sys.argv[1]
+            message = sys.argv[2] if len(sys.argv) > 2 else "Test notification"
+            logger.info(f"Test mode: event_type={event_type}, message={message}")
+            handler.notify("Claude Code", message, event_type)
+            sound = handler.get_notification_sound(event_type)
+            if sound:
+                handler.play_sound_file(sound)
+        else:
+            print("Test mode: python notify.py <event_type> [message]")
+    else:
+        # Read JSON from stdin
+        try:
+            raw_input = sys.stdin.read()
+            logger.info(f"Raw input received: {raw_input}")
+            
+            hook_data = json.loads(raw_input)
+            logger.info(f"Parsed hook data: {json.dumps(hook_data, indent=2)}")
+            
+            handler.handle_hook(hook_data)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON input: {e}")
+            logger.error(f"Raw input was: {raw_input}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Unexpected error: {type(e).__name__}: {e}")
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

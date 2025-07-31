@@ -1,0 +1,72 @@
+{
+  "_comment": "Replacements configuration for Claude Code notification system",
+  "_info": {
+    "description": "This file configures text replacements for notifications",
+    "project_folders": "Project folder names are encoded paths where '/' becomes '-', e.g. '/Users/john' → '-Users-john'",
+    "usage": "Project names affect both visual and audio notifications, commands only affect audio"
+  },
+  
+  "project_names": {
+    "comment": "Maps project names to human-friendly names. Keys are matched case-insensitively.",
+    "replacements": {
+      "documents": "Documents",
+      "downloads": "Downloads",
+      "desktop": "Desktop",
+      "projects": "Projects",
+      "repos": "Repositories",
+      "src": "Source Code",
+      "tmp": "Temporary",
+      "config": "Configuration",
+      "claude": "Claude Config"
+    }
+  },
+  
+  "commands": {
+    "comment": "Maps commands to human-friendly descriptions for audio only",
+    "replacements": {
+      "rm": "deleting files",
+      "mv": "moving files", 
+      "cp": "copying files",
+      "du": "checking disk usage",
+      "df": "checking disk space",
+      "ps": "checking processes",
+      "kill": "stopping process",
+      "chmod": "changing permissions",
+      "chown": "changing ownership",
+      "tar": "archiving files",
+      "gzip": "compressing files",
+      "gunzip": "decompressing files",
+      "find": "searching for files",
+      "grep": "searching in files",
+      "sed": "editing text",
+      "awk": "processing text",
+      "curl": "downloading from web",
+      "wget": "downloading file",
+      "git": "version control",
+      "npm": "managing packages",
+      "yarn": "managing packages",
+      "pip": "installing Python package",
+      "brew": "installing software",
+      "apt": "installing software",
+      "sudo": "with admin privileges"
+    }
+  },
+  
+  "patterns": {
+    "comment": "Regex patterns for more complex replacements in audio",
+    "replacements": [
+      {
+        "pattern": "git (commit|push|pull|clone)",
+        "replacement": "updating code repository"
+      },
+      {
+        "pattern": "npm (install|i)",
+        "replacement": "installing dependencies"
+      },
+      {
+        "pattern": "npm run (.*)",
+        "replacement": "running $1 script"
+      }
+    ]
+  }
+}
