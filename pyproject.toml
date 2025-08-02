@@ -3,7 +3,7 @@ name = "ccnotify"
 version = "0.1.0"
 description = "Intelligent notification system for Claude Code with audio feedback"
 authors = [
-    {name = "Helmi", email = "helmi@example.com"}
+    {name = "Frank Helmschrott", email = "frank@helmschrott.de"}
 ]
 readme = "README.md"
 license = {text = "MIT"}
@@ -41,6 +41,7 @@ dependencies = [
     
     # Utilities
     "tqdm>=4.64.0",                                 # Progress bars
+    "rich>=13.0.0",                                 # Interactive prompts and formatting
     "pathlib2>=2.3.7; python_version < '3.11'",    # Enhanced pathlib for older Python
 ]
 
@@ -65,14 +66,15 @@ Issues = "https://github.com/Helmi/ccnotify/issues"
 Documentation = "https://github.com/Helmi/ccnotify#readme"
 
 [project.scripts]
-ccnotify-setup = "setup:main"
+ccnotify = "ccnotify.cli:main"
+ccnotify-setup = "ccnotify.setup:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["ccnotify"]
+packages = ["src/ccnotify"]
 
 [tool.black]
 line-length = 100
@@ -130,10 +132,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=ccnotify --cov-report=term-missing --cov-report=html"
+addopts = "-v --cov=src/ccnotify --cov-report=term-missing --cov-report=html"
 
 [tool.coverage.run]
-source = ["ccnotify"]
+source = ["src/ccnotify"]
 branch = true
 
 [tool.coverage.report]

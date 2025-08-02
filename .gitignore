@@ -36,6 +36,13 @@ env/
 
 # Claude Code
 .claude/
+CLAUDE.md
+
+# Simone AI Assistant
+.simone/
+
+# MCP (Model Context Protocol)
+.mcp.json
 
 # Project specific
 logs/
@@ -48,6 +55,7 @@ pending_commands_cache.json
 .env
 .env.local
 .env.*.local
+*.local.*
 
 # Temporary files
 *.tmp

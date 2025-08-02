@@ -14,9 +14,11 @@ Handles installation and configuration of TTS providers
 
 import argparse
 import hashlib
+import json
 import sys
 from pathlib import Path
 from typing import Dict, Tuple
+from datetime import datetime
 import requests
 from tqdm import tqdm
 
@@ -61,7 +63,44 @@ def verify_file_hash(file_path: Path, expected_hash: str) -> bool:
     return sha256_hash.hexdigest() == expected_hash
 
 
-def setup_kokoro(update: bool = False) -> bool:
+def get_latest_model_info() -> dict:
+    """Get latest model release info from GitHub"""
+    try:
+        url = "https://api.github.com/repos/thewh1teagle/kokoro-onnx/releases/latest"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"⚠️  Could not check for updates: {e}")
+        return None
+
+
+def save_model_info(models_dir: Path, release_info: dict):
+    """Save model version info"""
+    info = {
+        "version": release_info.get("tag_name", "unknown"),
+        "updated_at": datetime.now().isoformat(),
+        "release_date": release_info.get("published_at", "unknown")
+    }
+    
+    info_file = models_dir / "model_info.json"
+    with open(info_file, 'w') as f:
+        json.dump(info, f, indent=2)
+
+
+def get_current_model_info(models_dir: Path) -> dict:
+    """Get current model version info"""
+    info_file = models_dir / "model_info.json"
+    if info_file.exists():
+        try:
+            with open(info_file, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def setup_kokoro(force_download: bool = False) -> bool:
     """Download and setup Kokoro TTS models"""
     print("🔧 Setting up Kokoro TTS...")
     
@@ -69,17 +108,22 @@ def setup_kokoro(update: bool = False) -> bool:
     models_dir = Path("models")
     models_dir.mkdir(exist_ok=True)
     
-    # Model files with expected sizes and hashes
+    # Check if models already exist
+    models_exist = all((models_dir / filename).exists() for filename in models.keys())
+    
+    if models_exist and not force_download:
+        print("✅ Kokoro models already installed (use --force to reinstall)")
+        return True
+    
+    # Model files with expected sizes
     models = {
         "kokoro-v1.0.onnx": {
             "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
             "size": 325532387,  # ~310MB
-            "hash": "e7c4b4d1c2a8e7f5d5c8e1f4c2a7b9e3d4f6a8c9e1b7f2d5c8a3e9f1b6d4c7a2"  # Placeholder
         },
         "voices-v1.0.bin": {
             "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
             "size": 28214398,   # ~27MB
-            "hash": "f8a2e1d3c7b9e4f6a5c8d2e9f1b3a7c4e6d8b2f5a9c1e4f7b3d6a8c2e5f9b1d4"  # Placeholder
         }
     }
     
@@ -88,9 +132,9 @@ def setup_kokoro(update: bool = False) -> bool:
     for filename, info in models.items():
         file_path = models_dir / filename
         
-        # Skip if file exists and not updating
-        if file_path.exists() and not update:
-            print(f"✓ {filename} already exists (use --update to refresh)")
+        # Skip if file exists and not forcing download
+        if file_path.exists() and not force_download:
+            print(f"✓ {filename} already exists")
             continue
         
         # Download the file
@@ -105,6 +149,11 @@ def setup_kokoro(update: bool = False) -> bool:
             success = False
     
     if success:
+        # Save version info
+        latest_release = get_latest_model_info()
+        if latest_release:
+            save_model_info(models_dir, latest_release)
+        
         print("✅ Kokoro TTS setup completed successfully!")
         print("\nTo use Kokoro TTS:")
         print("1. Set TTS_PROVIDER=kokoro in your .env file")
@@ -114,7 +163,7 @@ def setup_kokoro(update: bool = False) -> bool:
         # Test installation
         print("\n🧪 Testing installation...")
         try:
-            from ccnotify.tts.kokoro import KokoroProvider
+            from .tts.kokoro import KokoroProvider
             provider = KokoroProvider(models_dir)
             print("✅ Kokoro TTS installation verified!")
         except ImportError:
@@ -158,6 +207,65 @@ def list_voices() -> None:
     print("  • af_bella:80,af_nova:20  (80% Bella + 20% Nova)")
 
 
+def check_and_update() -> bool:
+    """
+    Check for updates to both package and models, guide user through updates
+    """
+    print("🔍 Checking for updates...")
+    
+    # Check package version
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["pip", "show", "ccnotify"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            for line in result.stdout.split('\n'):
+                if line.startswith('Version:'):
+                    current_pkg_version = line.split(':')[1].strip()
+                    print(f"📦 Current package version: {current_pkg_version}")
+                    break
+        else:
+            print("📦 Package not installed via pip (development mode?)")
+    except Exception as e:
+        print(f"⚠️  Could not check package version: {e}")
+    
+    # Check model version
+    models_dir = Path("models")
+    current_model_info = get_current_model_info(models_dir)
+    latest_release = get_latest_model_info()
+    
+    updates_available = False
+    
+    if latest_release:
+        latest_version = latest_release.get("tag_name", "unknown")
+        current_version = current_model_info.get("version", "none")
+        
+        print(f"🎤 Current model version: {current_version}")
+        print(f"🎤 Latest model version: {latest_version}")
+        
+        if current_version != latest_version:
+            updates_available = True
+            print(f"\n📦 Model update available: {current_version} → {latest_version}")
+        else:
+            print("✅ Models are up to date!")
+    else:
+        print("⚠️  Could not check for model updates")
+    
+    if updates_available:
+        print("\n🚀 Updates available!")
+        response = input("Update models now? [Y/n]: ").strip().lower()
+        
+        if response in ['', 'y', 'yes']:
+            return setup_kokoro(force_download=True)
+        else:
+            print("⏭️  Skipping model update")
+    
+    print("\n💡 To update the package, run: pip install --upgrade ccnotify")
+    return True
+
+
 def cleanup_models() -> None:
     """Clean up downloaded model files"""
     models_dir = Path("models")
@@ -199,31 +307,38 @@ def main():
         epilog="""
 Examples:
   python setup.py --kokoro          Install Kokoro TTS
-  python setup.py --kokoro --update Update Kokoro models
+  python setup.py --kokoro --force  Reinstall Kokoro models
+  python setup.py --update          Check for and install updates
   python setup.py --voices          List available voices
   python setup.py --cleanup         Remove downloaded models
         """)
     
     parser.add_argument("--kokoro", action="store_true", help="Setup Kokoro TTS")
-    parser.add_argument("--update", action="store_true", help="Update/redownload models")
+    parser.add_argument("--force", action="store_true", help="Force reinstall models")
+    parser.add_argument("--update", action="store_true", help="Check for and install updates")
     parser.add_argument("--voices", action="store_true", help="List available voices")
     parser.add_argument("--cleanup", action="store_true", help="Clean up downloaded models")
     
     args = parser.parse_args()
     
-    if not any([args.kokoro, args.voices, args.cleanup]):
+    if not any([args.kokoro, args.update, args.voices, args.cleanup]):
         parser.print_help()
         return
     
     if args.voices:
         list_voices()
     
-    if args.kokoro:
-        success = setup_kokoro(update=args.update)
+    if args.update:
+        success = check_and_update()
         if not success:
             sys.exit(1)
     
-    if args.cleanup:
+    elif args.kokoro:
+        success = setup_kokoro(force_download=args.force)
+        if not success:
+            sys.exit(1)
+    
+    elif args.cleanup:
         cleanup_models()
 
 

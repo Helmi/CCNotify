@@ -42,7 +42,7 @@ except ImportError:
 
 # Import our TTS provider system
 try:
-    from ccnotify.tts import get_tts_provider, TTSProvider
+    from src.ccnotify.tts import get_tts_provider, TTSProvider
 except ImportError:
     # Fallback for standalone usage
     get_tts_provider = None
@@ -143,16 +143,105 @@ def clean_old_cache_entries(cache: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[
     return cleaned_cache
 
 
-def resolve_project_name(session_id: str) -> str:
-    """Resolve project name from session ID"""
+def decode_project_folder_name(folder_name: str) -> Optional[str]:
+    """
+    Decode project folder name to actual path
+    -Users-helmi-code-paperless-ai → /Users/helmi/code/paperless-ai
+    """
+    if not folder_name.startswith('-'):
+        return None
+    
+    # Remove leading dash and split
+    parts = folder_name[1:].split('-')
+    
+    # Reconstruct path with proper separators
+    path = '/' + '/'.join(parts)
+    return path
+
+
+def is_cwd_under_project(cwd: str, project_path: str) -> bool:
+    """Check if current working directory is under the project path"""
+    try:
+        cwd_path = Path(cwd).resolve()
+        project_path_obj = Path(project_path).resolve()
+        return project_path_obj in cwd_path.parents or cwd_path == project_path_obj
+    except Exception:
+        return False
+
+
+def auto_add_project_to_replacements(project_name: str, folder_name: str = None):
+    """Automatically add project to replacements.json if not present"""
+    try:
+        replacements = load_replacements()
+        project_replacements = replacements.get("project_names", {}).get("replacements", {})
+        
+        # Check if project already exists (case-insensitive)
+        exists = any(project_name.lower() == key.lower() for key in project_replacements.keys())
+        
+        if not exists:
+            # Create pronunciation-friendly version (replace hyphens with spaces)
+            friendly_name = project_name.replace('-', ' ')
+            
+            # Add to replacements
+            project_replacements[project_name] = friendly_name
+            
+            # Ensure structure exists
+            if "project_names" not in replacements:
+                replacements["project_names"] = {}
+            replacements["project_names"]["replacements"] = project_replacements
+            
+            # Add metadata comment if it doesn't exist
+            if "comment" not in replacements["project_names"]:
+                replacements["project_names"]["comment"] = "Maps project names to human-friendly names. Keys are matched case-insensitively."
+            
+            # Add info about auto-discovery
+            if "_auto_discovered" not in replacements:
+                replacements["_auto_discovered"] = {
+                    "comment": "Projects below were auto-discovered. You can customize their pronunciation by editing the values."
+                }
+            
+            if "projects" not in replacements["_auto_discovered"]:
+                replacements["_auto_discovered"]["projects"] = {}
+            
+            # Track what was auto-discovered with folder reference
+            replacements["_auto_discovered"]["projects"][project_name] = {
+                "folder": folder_name,
+                "display_name": project_name,
+                "pronunciation": friendly_name
+            }
+            
+            # Save back to file
+            with open(REPLACEMENTS_FILE, 'w') as f:
+                json.dump(replacements, f, indent=2)
+            
+            logger.info(f"Auto-added project '{project_name}' to replacements (pronounce as '{friendly_name}')")
+            
+    except Exception as e:
+        logger.warning(f"Failed to auto-add project to replacements: {e}")
+
+
+def resolve_project_name(session_id: str, cwd: str = None) -> str:
+    """Resolve project name from session ID with cwd validation"""
     # Load and clean cache
     cache = load_project_cache()
     cache = clean_old_cache_entries(cache)
     
     # Check if we have a cached result
     if session_id in cache:
-        logger.debug(f"Found cached project name for session {session_id}: {cache[session_id]['project_name']}")
-        return cache[session_id]['project_name']
+        cached_name = cache[session_id]['project_name']
+        
+        # If we have cwd, validate the cache is still correct
+        if cwd and 'project_path' in cache[session_id]:
+            cached_path = cache[session_id]['project_path']
+            if not is_cwd_under_project(cwd, cached_path):
+                logger.warning(f"Cached project {cached_name} doesn't match cwd {cwd}, re-resolving")
+                # Continue to re-resolve
+            else:
+                logger.debug(f"Found cached project name for session {session_id}: {cached_name}")
+                return cached_name
+        else:
+            logger.debug(f"Found cached project name for session {session_id}: {cached_name}")
+            return cached_name
     
     # Search for the session file in project folders
     try:
@@ -161,33 +250,39 @@ def resolve_project_name(session_id: str) -> str:
         matches = glob.glob(pattern)
         
         if matches:
-            # Get the first match (should only be one)
+            # Get the project folder name
             project_path = Path(matches[0]).parent
             folder_name = project_path.name
             
-            # Extract project name from folder
-            # Format is usually like: -Users-helmi-code-synapsa
-            # We want the last part: synapsa
-            parts = folder_name.split('-')
+            # Decode the folder name to get actual project path
+            actual_project_path = decode_project_folder_name(folder_name)
             
-            # Find the last meaningful part (skip empty parts)
-            project_name = "unknown"
-            for i in range(len(parts) - 1, -1, -1):
-                if parts[i] and not parts[i].lower() in ['users', 'home', 'code', 'projects', 'documents']:
-                    project_name = parts[i]
-                    break
-            
-            # Cache the result
-            cache[session_id] = {
-                'project_name': project_name,
-                'timestamp': time.time(),
-                'full_path': str(project_path)
-            }
-            save_project_cache(cache)
-            
-            logger.debug(f"Resolved project name for session {session_id}: {project_name}")
-            return project_name
-            
+            if actual_project_path:
+                # Extract project name from the actual path
+                project_name = Path(actual_project_path).name
+                
+                # Validate against cwd if provided
+                if cwd and not is_cwd_under_project(cwd, actual_project_path):
+                    logger.warning(f"CWD {cwd} doesn't appear to be under project {actual_project_path}")
+                    # Still proceed but log the warning
+                
+                # Auto-add to replacements if not present
+                auto_add_project_to_replacements(project_name, folder_name)
+                
+                # Cache the result
+                cache[session_id] = {
+                    'project_name': project_name,
+                    'timestamp': time.time(),
+                    'project_path': actual_project_path,
+                    'claude_folder': folder_name
+                }
+                save_project_cache(cache)
+                
+                logger.debug(f"Resolved project name for session {session_id}: {project_name} (from {actual_project_path})")
+                return project_name
+            else:
+                logger.warning(f"Could not decode project folder name: {folder_name}")
+                
     except Exception as e:
         logger.warning(f"Error resolving project name: {e}")
     
@@ -395,12 +490,13 @@ class NotificationHandler:
         
         # Extract session context
         session_id = hook_data.get("session_id", "unknown")
-        project_name = resolve_project_name(session_id)
+        cwd = hook_data.get("cwd", "")
+        project_name = resolve_project_name(session_id, cwd)
         
         # Apply project name replacement
         display_project_name = apply_project_name_replacement(project_name, replacements)
         
-        cwd = Path(hook_data.get("cwd", "")).name or "unknown"
+        cwd_name = Path(cwd).name if cwd else "unknown"
         
         if hook_type == "PreToolUse":
             tool_name = hook_data.get("tool_name", "unknown")

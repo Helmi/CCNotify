@@ -10,7 +10,6 @@ import logging
 from .base import TTSProvider, TTSProviderNotAvailable
 from .kokoro import KokoroProvider
 from .elevenlabs import ElevenLabsProvider
-from .macos import MacOSProvider
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 TTS_PROVIDERS: Dict[str, Type[TTSProvider]] = {
     "kokoro": KokoroProvider,
     "elevenlabs": ElevenLabsProvider,
-    "macos_say": MacOSProvider,
 }
 
 
@@ -44,7 +42,7 @@ def get_tts_provider(
     
     # Get provider name from config or environment
     if provider_name is None:
-        provider_name = config.get("provider", os.getenv("TTS_PROVIDER", "macos_say"))
+        provider_name = config.get("provider", os.getenv("TTS_PROVIDER", "kokoro"))
     
     # Normalize provider name
     provider_name = provider_name.lower().strip()
@@ -111,11 +109,6 @@ def _build_provider_config(provider_name: str, base_config: Dict[str, Any]) -> D
             "similarity_boost": base_config.get("similarity_boost", 0.5),
         })
     
-    elif provider_name == "macos_say":
-        config.update({
-            "voice": os.getenv("MACOS_VOICE", base_config.get("voice", "Samantha")),
-            "rate": base_config.get("rate", None),
-        })
     
     return config
 
@@ -125,12 +118,11 @@ def _get_fallback_order(primary_provider: str) -> list:
     
     # Define fallback preferences
     fallback_map = {
-        "kokoro": ["elevenlabs", "macos_say"],
-        "elevenlabs": ["kokoro", "macos_say"],
-        "macos_say": ["kokoro", "elevenlabs"],
+        "kokoro": ["elevenlabs"],
+        "elevenlabs": ["kokoro"],
     }
     
-    return fallback_map.get(primary_provider, ["kokoro", "elevenlabs", "macos_say"])
+    return fallback_map.get(primary_provider, ["kokoro", "elevenlabs"])
 
 
 def list_available_providers() -> Dict[str, Dict[str, Any]]:
@@ -171,8 +163,7 @@ def _get_provider_description(provider_name: str) -> str:
     """Get human-readable description of a provider"""
     descriptions = {
         "kokoro": "Local high-quality TTS using ONNX models",
-        "elevenlabs": "Premium cloud-based TTS with natural voices",
-        "macos_say": "Built-in macOS system text-to-speech"
+        "elevenlabs": "Premium cloud-based TTS with natural voices"
     }
     return descriptions.get(provider_name, "Unknown provider")
 
