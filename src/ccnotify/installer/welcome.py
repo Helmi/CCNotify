@@ -38,17 +38,20 @@ def display_welcome_screen(version: str, platform: str, is_update: bool = False)
     action = "UPDATE" if is_update else "INSTALLATION"
     info_text = Text(f"v{version} • {platform} • {action}", style="dim")
     
-    # Combine all elements
-    content = Text()
-    content.append(ascii_text)
-    content.append("\n")
-    content.append(Align.center(subtitle_text))
-    content.append("\n")
-    content.append(Align.center(info_text))
+    # Create a Group to combine elements properly
+    from rich.console import Group
+    
+    content = Group(
+        Align.center(ascii_text),
+        "",  # Empty line
+        Align.center(subtitle_text),
+        "",  # Empty line  
+        Align.center(info_text)
+    )
     
     # Create panel with border
     panel = Panel(
-        Align.center(content),
+        content,
         border_style="blue",
         padding=(1, 2),
         title="[bold blue]CCNotify Installer[/bold blue]" if not is_update else "[bold blue]CCNotify Updater[/bold blue]",
