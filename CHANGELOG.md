@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved error propagation throughout installation flow
 - Better user feedback when TTS provider setup fails
 
+### ⚠️ Breaking Changes
+
+- Minimum Python version is now 3.10 (was 3.9) due to onnxruntime dependency requirements
+
 ## [0.1.1] - 2025-08-03
 
 ### 🐛 Fixed

@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["notifications", "tts", "claude-code", "audio", "productivity"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -16,10 +16,7 @@ classifiers = [
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Monitoring",
