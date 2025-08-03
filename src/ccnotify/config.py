@@ -149,6 +149,11 @@ def merge_configs(default: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, An
     return merged
 
 
+def get_claude_config_dir() -> Path:
+    """Get the Claude configuration directory (~/.claude)"""
+    return Path.home() / ".claude"
+
+
 def get_claude_profile_dir() -> Optional[Path]:
     """Find Claude Code profile directory"""
     possible_locations = [

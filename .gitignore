@@ -88,3 +88,10 @@ Desktop.ini
 # Linux
 .directory
 .Trash-*
+# Build artifacts
+dist/
+temp_extract/
+
+# Large model files
+models/*.onnx
+models/*.bin

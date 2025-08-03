@@ -1,17 +1,32 @@
 # CCNotify
 
-🔔 Intelligent notification system for Claude Code with audio feedback
+## Voice Notification System for Claude Code
 
-Early-stage project providing smart notifications for Claude Code tool usage with local text-to-speech support.
+🗣️ Have your favourite Voide tell you what's up in Claude Code
+⁉ Get notified when your Input is needed
+⚠ Be aware of critical commands being executed
+🏃‍♂️ Stay in control of multiple agents
+🕵🏻‍♂️ Select between local TTS (Kokoro) and Elevenlabs (more to come)
+💡 Sound caching system to save on API Credity/Processing time
+
+**NOTE:** This is an early stage project I primarily designed around my own use cases.
+
+❤️ Your input through Github Issues is highly appreciated.
+
+## Platforms
+
+Currently CCNotify is only tested on MacOS (15.5). Help testing or implementing other Platforms. PRs welcome.
 
 ## Quick Start
 
+Interactive installer - guides you through everything. All you need is Python and UV installed.
+
 ```bash
-# Interactive installer - guides you through everything
 uvx ccnotify install
 ```
 
 That's it! The installer will:
+
 - Help you choose between local (Kokoro) or cloud (ElevenLabs) TTS
 - Download models if needed
 - Install hooks into Claude Code
@@ -19,6 +34,12 @@ That's it! The installer will:
 - Guide you through next steps
 
 Restart Claude Code to enable notifications.
+
+## Support the work
+
+If you want to support the project or me in Person, feel free to become a Github Sponsor.
+
+If you use Elevenlabs as a TTS provider, [use my Affiliate link to signup](https://try.elevenlabs.io/ist8m7h95ed2).
 
 ## Features
 
@@ -31,27 +52,27 @@ Restart Claude Code to enable notifications.
 ## Commands
 
 ```bash
-# Interactive installer
-uvx ccnotify install                     # Guided setup with TTS provider selection
-uvx ccnotify install --force             # Overwrite existing installation
-uvx ccnotify install --non-interactive   # Skip prompts (hooks only)
-
-# Manual TTS management
-uvx ccnotify setup --kokoro             # Download local TTS models (~350MB)
-uvx ccnotify setup --update             # Check for model updates
-uvx ccnotify setup --voices             # List available voices
-uvx ccnotify setup --cleanup            # Remove downloaded models
-
-# Configuration
-uvx ccnotify config --show              # Show configuration paths
-uvx ccnotify config --init              # Initialize configuration
+# Single intelligent install command - handles everything automatically
+uvx ccnotify install                     # Install or update CCNotify intelligently
+uvx ccnotify install --force             # Force complete reinstallation
+uvx ccnotify install --config-only       # Only update configuration
+uvx ccnotify install --quiet             # Minimal output mode
 ```
+
+The new installer automatically detects:
+- Whether CCNotify is already installed (runs update flow)
+- What TTS provider you prefer  
+- Whether models need downloading
+- Configuration migration needs
+
+**That's it!** No more complex subcommands - just one command that does the right thing.
 
 ## Configuration
 
 The installer creates a configuration file at `~/.claude/ccnotify/config.json`. Key settings:
 
 **For Local TTS (Kokoro):**
+
 ```json
 {
   "tts": { "provider": "kokoro", "enabled": true },
@@ -64,6 +85,7 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 ```
 
 **For Cloud TTS (ElevenLabs):**
+
 ```json
 {
   "tts": { "provider": "elevenlabs", "enabled": true },
@@ -76,12 +98,13 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 ```
 
 **Voice Options:**
+
 - **Kokoro**: `af_sarah`, `am_adam`, `bf_alice`, `bm_daniel` and [40+ others](https://github.com/thewh1teagle/kokoro-onnx)
-- **ElevenLabs**: Use voice IDs from your [ElevenLabs account](https://elevenlabs.io/speech-synthesis)
+- **ElevenLabs**: Use voice IDs from your [ElevenLabs account](https://try.elevenlabs.io/ist8m7h95ed2)
 
 ## Requirements
 
-- macOS or Linux  
+- macOS or Linux
 - Python 3.9+
 - Claude Code CLI
 - **For Kokoro**: ~350MB disk space for local models
@@ -98,7 +121,7 @@ This is v0.1.0 - an early release focused on core functionality. Features may ch
 CCNotify hooks into Claude Code's tool execution events and provides audio notifications for:
 
 - Potentially risky operations (file deletions, system commands)
-- Task completion  
+- Task completion
 - Error conditions
 - Input requirements
 
