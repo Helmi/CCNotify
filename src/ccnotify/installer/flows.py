@@ -166,19 +166,28 @@ class FirstTimeFlow(BaseFlow):
             if choice == "1":
                 # Kokoro setup
                 if Confirm.ask("Download Kokoro TTS models? (~500MB)", default=True):
-                    return self._setup_kokoro()
+                    kokoro_config = self._setup_kokoro()
+                    if not kokoro_config:
+                        console.print("[yellow]Kokoro setup failed. Please choose another provider.[/yellow]")
+                        continue
+                    return kokoro_config
                 else:
-                    return {"tts_provider": "kokoro", "skip_models": True}
+                    console.print("[yellow]Kokoro requires model files to function. Please choose another provider.[/yellow]")
+                    continue
             
             elif choice == "2":
                 # ElevenLabs setup
-                return self._setup_elevenlabs()
+                elevenlabs_config = self._setup_elevenlabs()
+                if not elevenlabs_config:
+                    console.print("[yellow]ElevenLabs setup failed. Please choose another provider.[/yellow]")
+                    continue
+                return elevenlabs_config
             
             elif choice == "3":
                 # Silent mode
                 return {"tts_provider": "none"}
     
-    def _setup_kokoro(self) -> Dict[str, Any]:
+    def _setup_kokoro(self) -> Optional[Dict[str, Any]]:
         """Setup Kokoro TTS provider."""
         console.print("\n[bold cyan]Setting up Kokoro TTS...[/bold cyan]")
         
@@ -189,11 +198,12 @@ class FirstTimeFlow(BaseFlow):
             if setup_result:
                 return {"tts_provider": "kokoro", "models_downloaded": True}
             else:
-                return {"tts_provider": "kokoro", "models_downloaded": False}
+                console.print(f"[red]Failed to download Kokoro models[/red]")
+                return None
                 
         except Exception as e:
             console.print(f"[red]Error setting up Kokoro: {e}[/red]")
-            return {"tts_provider": "kokoro", "models_downloaded": False}
+            return None
     
     def _setup_elevenlabs(self) -> Optional[Dict[str, Any]]:
         """Setup ElevenLabs TTS provider."""

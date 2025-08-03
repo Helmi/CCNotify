@@ -1,6 +1,6 @@
 [project]
 name = "ccnotify"
-version = "0.1.1"
+version = "0.1.2"
 description = "Intelligent notification system for Claude Code with audio feedback"
 authors = [
     {name = "Frank Helmschrott", email = "frank@helmschrott.de"}

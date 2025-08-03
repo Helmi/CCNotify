@@ -108,13 +108,6 @@ def setup_kokoro(force_download: bool = False) -> bool:
     models_dir = Path("models")
     models_dir.mkdir(exist_ok=True)
     
-    # Check if models already exist
-    models_exist = all((models_dir / filename).exists() for filename in models.keys())
-    
-    if models_exist and not force_download:
-        print("✅ Kokoro models already installed (use --force to reinstall)")
-        return True
-    
     # Model files with expected sizes
     models = {
         "kokoro-v1.0.onnx": {
@@ -126,6 +119,13 @@ def setup_kokoro(force_download: bool = False) -> bool:
             "size": 28214398,   # ~27MB
         }
     }
+    
+    # Check if models already exist
+    models_exist = all((models_dir / filename).exists() for filename in models.keys())
+    
+    if models_exist and not force_download:
+        print("✅ Kokoro models already installed (use --force to reinstall)")
+        return True
     
     success = True
     

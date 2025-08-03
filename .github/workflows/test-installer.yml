@@ -1,0 +1,53 @@
+name: Test Installer
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/ccnotify/installer/**'
+      - 'src/ccnotify/cli.py'
+      - 'src/ccnotify/setup.py'
+      - 'scripts/test_installer.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/ccnotify/installer/**'
+      - 'src/ccnotify/cli.py'
+      - 'src/ccnotify/setup.py'
+      - 'scripts/test_installer.py'
+
+jobs:
+  test-installer:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+    
+    - name: Run installer tests
+      run: |
+        python scripts/test_installer.py
+    
+    - name: Test actual installation
+      run: |
+        # Test the actual uvx command
+        uvx ccnotify install --quiet --force
+        
+        # Verify installation
+        test -f ~/.claude/ccnotify/ccnotify.py || exit 1
+        test -f ~/.claude/ccnotify/config.json || exit 1
+        
+        echo "✅ Installation verified"
