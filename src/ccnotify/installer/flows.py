@@ -192,14 +192,28 @@ class FirstTimeFlow(BaseFlow):
         console.print("\n[bold cyan]Setting up Kokoro TTS...[/bold cyan]")
         
         try:
-            # Call the existing setup_kokoro function
-            setup_result = setup_kokoro(force_download=False)
+            # Change to ccnotify directory so models are created in the right place
+            import os
+            original_cwd = os.getcwd()
+            os.chdir(str(self.ccnotify_dir))
             
-            if setup_result:
-                return {"tts_provider": "kokoro", "models_downloaded": True}
-            else:
-                console.print(f"[red]Failed to download Kokoro models[/red]")
-                return None
+            try:
+                # Call the existing setup_kokoro function
+                setup_result = setup_kokoro(force_download=False)
+                
+                if setup_result:
+                    # Include models_dir in config
+                    return {
+                        "tts_provider": "kokoro", 
+                        "models_downloaded": True,
+                        "models_dir": str(self.ccnotify_dir / "models")
+                    }
+                else:
+                    console.print(f"[red]Failed to download Kokoro models[/red]")
+                    return None
+            finally:
+                # Always restore original directory
+                os.chdir(original_cwd)
                 
         except Exception as e:
             console.print(f"[red]Error setting up Kokoro: {e}[/red]")

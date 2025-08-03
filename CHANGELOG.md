@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-08-03
+
+### 🐛 Fixed
+
+- **Models directory location**: Kokoro models now correctly install in `~/.claude/ccnotify/models` instead of current directory
+  - Installer changes directory before running setup_kokoro
+  - Config file now includes correct models_dir path
+- **Hardcoded paths removed**: Removed all hardcoded references to old `~/.claude/hooks` directory
+  - Updated BASE_DIR to use `~/.claude/ccnotify`
+  - notify.py now reads models_dir from config.json
+  - Prevents creation of unwanted hooks directory
+
+### 📝 Internal
+
+- TTS provider initialization now properly reads configuration from config.json
+- Better handling of models directory path in Kokoro provider
+
 ## [0.1.3] - 2025-08-03
 
 ### 🐛 Fixed
@@ -167,6 +184,7 @@ Configuration is stored in `~/.claude/ccnotify/config.json`:
 
 **Migration**: First-time installation - no migration needed.
 
+[0.1.4]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.1

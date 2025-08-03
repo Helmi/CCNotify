@@ -49,7 +49,7 @@ except ImportError:
     TTSProvider = None
 
 # Configuration
-BASE_DIR = Path.home() / ".claude" / "hooks"
+BASE_DIR = Path.home() / ".claude" / "ccnotify"
 SOUNDS_DIR = BASE_DIR / "sounds"
 LOGS_DIR = BASE_DIR / "logs"
 CACHE_FILE = BASE_DIR / "session_project_cache.json"
@@ -67,7 +67,7 @@ ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel
 ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")  # Flash 2.5
 KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
-KOKORO_PATH = os.getenv("KOKORO_PATH", "/Users/helmi/.claude/hooks/kokoro-tts")
+# KOKORO_PATH is now determined from config file
 KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")  # Speed multiplier (0.5-2.0)
 
 # Create a no-op logger class for when logging is disabled
@@ -358,10 +358,20 @@ class NotificationHandler:
             return
             
         try:
+            # Load configuration file
+            config_file = BASE_DIR / "config.json"
+            config = {}
+            if config_file.exists():
+                try:
+                    with open(config_file) as f:
+                        config = json.load(f)
+                except Exception:
+                    pass
+            
             # Build TTS configuration
             tts_config = {
                 "provider": TTS_PROVIDER,
-                "models_dir": "models",  # Use project-relative models directory
+                "models_dir": config.get("models_dir", str(BASE_DIR / "models")),  # Use config or default
                 # Kokoro config
                 "voice": KOKORO_VOICE,
                 "speed": KOKORO_SPEED,
@@ -633,7 +643,7 @@ def main():
             ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
             ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
             KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
-            KOKORO_PATH = os.getenv("KOKORO_PATH", "/Users/helmi/.claude/hooks/kokoro-tts")
+            # KOKORO_PATH is now determined from config file
             KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")
     except ImportError:
         pass
