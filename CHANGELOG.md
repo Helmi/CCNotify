@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-08-03
+
+### 🐛 Fixed
+
+- **Critical installer bug**: Fixed Rich Text concatenation error that caused UpdateFlow to crash when existing installations were detected
+  - Changed from `Text.append(Align)` to `Group` composition in welcome screen
+  - Installer now properly displays ANSI Shadow welcome screen and status tables
+  - Both first-time installation and update flows work correctly
+
+### 📝 Internal
+
+- Improved error handling in version comparison utilities when `packaging` module is not available
+
 ## [0.1.0] - 2025-08-03
 
 ### 🎉 Initial Release
@@ -120,4 +133,5 @@ Configuration is stored in `~/.claude/ccnotify/config.json`:
 
 **Migration**: First-time installation - no migration needed.
 
+[0.1.1]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.0
