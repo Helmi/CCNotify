@@ -1,0 +1,215 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      confirm_publish:
+        description: 'Type "PUBLISH" to confirm production release'
+        required: true
+        type: string
+      skip_tests:
+        description: 'Skip TestPyPI verification (not recommended)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Verify Release Readiness
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_publish: ${{ steps.verify.outputs.should_publish }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Verify manual confirmation
+      id: verify
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        if [ "${{ github.event.inputs.confirm_publish }}" != "PUBLISH" ]; then
+          echo "❌ Manual confirmation failed. Type 'PUBLISH' to confirm."
+          echo "should_publish=false" >> $GITHUB_OUTPUT
+          exit 1
+        else
+          echo "✅ Manual confirmation verified"
+          echo "should_publish=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Auto-approve for releases
+      if: github.event_name == 'release'
+      run: echo "should_publish=true" >> $GITHUB_OUTPUT
+    
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          # Extract version from release tag (remove 'v' prefix)
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+        else
+          # Extract from pyproject.toml for manual dispatch
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Publishing version: $VERSION"
+
+  test-on-testpypi:
+    name: Verify on TestPyPI
+    needs: verify-release
+    if: needs.verify-release.outputs.should_publish == 'true' && !inputs.skip_tests
+    runs-on: ubuntu-latest
+    environment: testpypi
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    
+    - name: Build package
+      run: python -m build
+    
+    - name: Check if version exists on TestPyPI
+      run: |
+        set +e  # Don't exit on error
+        pip index versions ccnotify --index-url https://test.pypi.org/simple/ | grep "${{ needs.verify-release.outputs.version }}"
+        if [ $? -eq 0 ]; then
+          echo "✅ Version ${{ needs.verify-release.outputs.version }} found on TestPyPI"
+        else
+          echo "❌ Version ${{ needs.verify-release.outputs.version }} not found on TestPyPI"
+          echo "Please run the 'Test Publish to TestPyPI' workflow first"
+          exit 1
+        fi
+    
+    - name: Test installation from TestPyPI
+      run: |
+        pip install \
+          --index-url https://test.pypi.org/simple/ \
+          --extra-index-url https://pypi.org/simple/ \
+          ccnotify==${{ needs.verify-release.outputs.version }}
+        
+        # Quick functionality test
+        python -c "import ccnotify; print(f'TestPyPI version: {ccnotify.__version__}')"
+        ccnotify --version
+        echo "✅ TestPyPI version works correctly"
+
+  publish-to-pypi:
+    name: Publish to Production PyPI
+    needs: [verify-release, test-on-testpypi]
+    if: |
+      always() && 
+      needs.verify-release.outputs.should_publish == 'true' && 
+      (needs.test-on-testpypi.result == 'success' || inputs.skip_tests)
+    runs-on: ubuntu-latest
+    environment: pypi
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+    
+    - name: Build package
+      run: |
+        python -m build
+        echo "Built packages:"
+        ls -la dist/
+    
+    - name: Final package verification
+      run: |
+        twine check dist/*
+        echo "✅ Final package check passed"
+    
+    - name: Check if version already exists on PyPI
+      run: |
+        set +e  # Don't exit on error
+        pip index versions ccnotify | grep "${{ needs.verify-release.outputs.version }}"
+        if [ $? -eq 0 ]; then
+          echo "❌ Version ${{ needs.verify-release.outputs.version }} already exists on PyPI"
+          echo "Cannot republish existing version. Please bump the version number."
+          exit 1
+        else
+          echo "✅ Version ${{ needs.verify-release.outputs.version }} is new - proceeding with publication"
+        fi
+    
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+        print-hash: true
+        verbose: true
+    
+    - name: Wait for package availability
+      run: |
+        echo "⏳ Waiting 60 seconds for package to become available on PyPI..."
+        sleep 60
+    
+    - name: Verify PyPI publication
+      run: |
+        echo "🔍 Verifying publication on PyPI..."
+        
+        # Install from PyPI
+        pip install ccnotify==${{ needs.verify-release.outputs.version }}
+        
+        # Verify version
+        python -c "
+        import ccnotify
+        print(f'✅ Successfully installed ccnotify v{ccnotify.__version__} from PyPI')
+        assert ccnotify.__version__ == '${{ needs.verify-release.outputs.version }}', 'Version mismatch'
+        "
+        
+        # Test CLI
+        ccnotify --version
+        echo "✅ PyPI publication verified successfully"
+    
+    - name: Create publication summary
+      run: |
+        echo "## 🎉 Successfully Published to PyPI" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Package:** ccnotify" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ needs.verify-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**PyPI URL:** https://pypi.org/project/ccnotify/${{ needs.verify-release.outputs.version }}/" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "uvx ccnotify install" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+        echo "- [PyPI Package](https://pypi.org/project/ccnotify/)" >> $GITHUB_STEP_SUMMARY
+        echo "- [GitHub Release](${{ github.event.release.html_url || github.server_url }}/${{ github.repository }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [Documentation](https://github.com/${{ github.repository }}#readme)" >> $GITHUB_STEP_SUMMARY
+    
+    - name: Post to release (if applicable)
+      if: github.event_name == 'release'
+      run: |
+        echo "📦 Package published to PyPI: https://pypi.org/project/ccnotify/${{ needs.verify-release.outputs.version }}/" >> release_comment.txt
+        echo "" >> release_comment.txt
+        echo "Installation: \`uvx ccnotify install\`" >> release_comment.txt
+        
+        # This would require additional permissions to comment on releases
+        # gh release edit ${{ github.event.release.tag_name }} --notes-file release_comment.txt
