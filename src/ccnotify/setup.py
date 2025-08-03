@@ -164,8 +164,17 @@ def setup_kokoro(force_download: bool = False) -> bool:
         print("\n🧪 Testing installation...")
         try:
             from .tts.kokoro import KokoroProvider
-            provider = KokoroProvider(models_dir)
-            print("✅ Kokoro TTS installation verified!")
+            # Create proper config for KokoroProvider
+            test_config = {
+                "models_dir": str(models_dir),
+                "voice": "af_sarah",
+                "speed": 1.0
+            }
+            provider = KokoroProvider(test_config)
+            if provider.is_available():
+                print("✅ Kokoro TTS installation verified!")
+            else:
+                print("⚠️  Kokoro TTS installed but models not available")
         except ImportError:
             print("⚠️  Kokoro TTS installed, but ccnotify.tts module not found")
             print("   Run this after implementing the TTS provider system")
