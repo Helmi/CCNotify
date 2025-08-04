@@ -341,6 +341,33 @@ class UpdateFlow(BaseFlow):
                     
                     if success and update_info.config_migration_needed:
                         success = self._migrate_config()
+                    
+                    # Fix missing models if needed
+                    if success and status.issues:
+                        for issue in status.issues:
+                            if "models directory missing" in issue and status.tts_provider == "kokoro":
+                                if not quiet:
+                                    display_progress_header("Downloading Missing Kokoro Models", 1, 1)
+                                
+                                # Download models
+                                kokoro_config = self._setup_kokoro()
+                                if kokoro_config:
+                                    # Update config with models_dir
+                                    config_file = self.ccnotify_dir / "config.json"
+                                    if config_file.exists():
+                                        try:
+                                            with open(config_file) as f:
+                                                config = json.load(f)
+                                            config.update(kokoro_config)
+                                            with open(config_file, 'w') as f:
+                                                json.dump(config, f, indent=2)
+                                        except Exception:
+                                            pass
+                            
+                            elif "not configured in Claude settings" in issue:
+                                if not quiet:
+                                    display_progress_header("Configuring Claude Integration", 1, 1)
+                                self._configure_claude_hooks()
                 
                 if success:
                     # Clean up backups

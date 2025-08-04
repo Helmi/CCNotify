@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-08-03
+
+### 🐛 Fixed
+
+- **Update flow now fixes detected issues**: The updater now actually fixes the issues it detects
+  - Downloads missing Kokoro models when detected
+  - Configures Claude hooks when missing
+  - Previously only updated the script file while showing but ignoring other issues
+
+### 📝 Internal
+
+- Added logic to UpdateFlow to handle all detected installation issues
+- Updater no longer just shows problems - it fixes them
+
 ## [0.1.4] - 2025-08-03
 
 ### 🐛 Fixed
@@ -184,6 +198,7 @@ Configuration is stored in `~/.claude/ccnotify/config.json`:
 
 **Migration**: First-time installation - no migration needed.
 
+[0.1.5]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.5
 [0.1.4]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Helmi/ccnotify/releases/tag/v0.1.2
