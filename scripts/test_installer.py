@@ -103,7 +103,7 @@ def test_update_flow():
         detector = InstallationDetector()
         status = detector.check_existing_installation()
         
-        return status.exists and status.script_exists
+        return status.exists and status.script_version is not None
 
 
 def test_cli_command():
