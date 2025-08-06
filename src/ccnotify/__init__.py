@@ -2,7 +2,7 @@
 CCNotify - Intelligent notification system for Claude Code with audio feedback
 """
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 __author__ = "Helmi"
 __license__ = "MIT"
 

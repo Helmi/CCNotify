@@ -208,9 +208,17 @@ class InstallationDetector:
             hooks = settings.get("hooks", {})
             
             # Look for ccnotify.py in any hook configuration
-            for hook_name, hook_config in hooks.items():
-                if isinstance(hook_config, dict):
-                    command = hook_config.get("command", "")
+            for hook_name, hook_list in hooks.items():
+                if isinstance(hook_list, list):
+                    # Hooks are arrays of hook objects
+                    for hook in hook_list:
+                        if isinstance(hook, dict):
+                            command = hook.get("command", "")
+                            if "ccnotify.py" in command:
+                                return True
+                elif isinstance(hook_list, dict):
+                    # Legacy format (if it exists)
+                    command = hook_list.get("command", "")
                     if "ccnotify.py" in command:
                         return True
                         
