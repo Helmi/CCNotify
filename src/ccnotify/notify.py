@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+__version__ = "0.1.10"
+
 # /// script
 # requires-python = ">=3.9"
 # dependencies = [
@@ -485,7 +487,8 @@ class NotificationHandler:
     
     def handle_hook(self, hook_data: Dict[str, Any]):
         """Process hook data and generate appropriate notification"""
-        hook_type = hook_data.get("hook_event_name", "unknown")
+        # Claude Code uses "event" field, not "hook_event_name"
+        hook_type = hook_data.get("event", hook_data.get("hook_event_name", "unknown"))
         logger.info(f"Processing hook type: {hook_type}")
         
         # Log all available fields for this hook type
@@ -498,10 +501,28 @@ class NotificationHandler:
         # Load replacements configuration
         replacements = load_replacements()
         
-        # Extract session context
-        session_id = hook_data.get("session_id", "unknown")
-        cwd = hook_data.get("cwd", "")
-        project_name = resolve_project_name(session_id, cwd)
+        # Extract session context - Claude Code uses camelCase "sessionId"
+        session_id = hook_data.get("sessionId", hook_data.get("session_id", "unknown"))
+        cwd = hook_data.get("cwd", os.getcwd())  # Fall back to current working directory
+        
+        # If no session ID but we have cwd, try to extract project name from path
+        if session_id == "unknown" and cwd:
+            # Try to extract project name from cwd
+            path_parts = Path(cwd).parts
+            # Look for common project directories
+            if "code" in path_parts:
+                idx = path_parts.index("code")
+                if idx + 1 < len(path_parts):
+                    project_name = path_parts[idx + 1]
+                else:
+                    project_name = Path(cwd).name
+            else:
+                project_name = Path(cwd).name
+            
+            logger.info(f"No session ID, extracted project from cwd: {project_name}")
+        else:
+            project_name = resolve_project_name(session_id, cwd)
+            logger.info(f"Resolved project name from session: {project_name}")
         
         # Apply project name replacement
         display_project_name = apply_project_name_replacement(project_name, replacements)
@@ -509,12 +530,14 @@ class NotificationHandler:
         cwd_name = Path(cwd).name if cwd else "unknown"
         
         if hook_type == "PreToolUse":
-            tool_name = hook_data.get("tool_name", "unknown")
+            # Claude Code sends "tool" not "tool_name"
+            tool_name = hook_data.get("tool", hook_data.get("tool_name", "unknown"))
             
             # Only notify for truly dangerous operations
             # Skip notifications for common safe operations
             if tool_name == "Bash":
-                command = hook_data.get("tool_input", {}).get("command", "")
+                # Claude Code sends "parameters" not "tool_input"
+                command = hook_data.get("parameters", hook_data.get("tool_input", {})).get("command", "")
                 # Skip common safe commands
                 safe_prefixes = ["echo", "pwd", "ls", "cat", "head", "tail", "grep", "find", "which"]
                 if any(command.strip().startswith(prefix) for prefix in safe_prefixes):
@@ -540,7 +563,8 @@ class NotificationHandler:
             
             # Skip most file edits unless they're system files
             elif tool_name in ["Write", "MultiEdit", "Edit"]:
-                file_path = hook_data.get("tool_input", {}).get("file_path", "")
+                # Claude Code sends "parameters" not "tool_input"
+                file_path = hook_data.get("parameters", hook_data.get("tool_input", {})).get("file_path", "")
                 # Only notify for system/config files
                 if any(x in file_path for x in ["/etc/", "/usr/", ".env", "config", "secret"]):
                     event_type = "tool_activity"
@@ -550,8 +574,10 @@ class NotificationHandler:
         
         elif hook_type == "PostToolUse":
             # Check for errors in tool response
-            tool_response = hook_data.get("tool_response", {})
-            tool_name = hook_data.get("tool_name", "unknown")
+            # Claude Code might send "response" or "tool_response"
+            tool_response = hook_data.get("response", hook_data.get("tool_response", {}))
+            # Claude Code sends "tool" not "tool_name"
+            tool_name = hook_data.get("tool", hook_data.get("tool_name", "unknown"))
             
             # Debug log the tool response structure
             logger.debug(f"PostToolUse response for {tool_name}: {json.dumps(tool_response, indent=2) if isinstance(tool_response, dict) else tool_response}")
