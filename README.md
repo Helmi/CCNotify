@@ -2,12 +2,12 @@
 
 ## Voice Notification System for Claude Code
 
-🗣️ Have your favourite Voide tell you what's up in Claude Code
-⁉ Get notified when your Input is needed
-⚠ Be aware of critical commands being executed
-🏃‍♂️ Stay in control of multiple agents
-🕵🏻‍♂️ Select between local TTS (Kokoro) and Elevenlabs (more to come)
-💡 Sound caching system to save on API Credity/Processing time
+- 🗣️ Have your favourite Voide tell you what's up in Claude Code
+- ⁉ Get notified when your Input is needed
+- ⚠ Be aware of critical commands being executed
+- 🏃‍♂️ Stay in control of multiple agents
+- 🕵🏻‍♂️ Select between local TTS (Kokoro) and Elevenlabs (more to come)
+- 💡 Sound caching system to save on API Credity/Processing time
 
 **NOTE:** This is an early stage project I primarily designed around my own use cases.
 
@@ -60,8 +60,9 @@ uvx ccnotify install --quiet             # Minimal output mode
 ```
 
 The new installer automatically detects:
+
 - Whether CCNotify is already installed (runs update flow)
-- What TTS provider you prefer  
+- What TTS provider you prefer
 - Whether models need downloading
 - Configuration migration needs
 
