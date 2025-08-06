@@ -219,8 +219,14 @@ class UpdateManager:
                 if config_file.exists():
                     config_backup = config_file.read_text()
             
-            # Update would happen here - for now just preserve config
-            # In real implementation, this would regenerate ccnotify.py with new template
+            # Generate new script with updated template
+            from ..cli import get_notify_template
+            script_content = get_notify_template()
+            
+            # Update the script file
+            script_file = self.ccnotify_dir / "ccnotify.py"
+            script_file.write_text(script_content)
+            script_file.chmod(0o755)
             
             # Restore configuration
             if config_backup and preserve_config:

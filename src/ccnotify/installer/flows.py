@@ -337,9 +337,13 @@ class UpdateFlow(BaseFlow):
                     success = self._update_config_only()
                 else:
                     if update_info.script_update_available:
+                        if not quiet:
+                            display_progress_header("Updating CCNotify Script", 1, 1)
                         success = self.updater.update_script_only(preserve_config=True)
                     
                     if success and update_info.config_migration_needed:
+                        if not quiet:
+                            display_progress_header("Migrating Configuration", 1, 1)
                         success = self._migrate_config()
                     
                     # Fix missing models if needed
