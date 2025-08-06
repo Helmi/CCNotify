@@ -31,6 +31,7 @@ import glob
 import re
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlparse
 
 try:
     import pync
@@ -632,12 +633,32 @@ class NotificationHandler:
                 if any(prefix in command for prefix in dangerous_prefixes):
                     event_type = "tool_activity"
                     # Extract the command and first argument for cleaner message
-                    cmd_parts = command.split()
+                    # Split only up to pipe to avoid getting arguments from piped commands
+                    base_command = command.split('|')[0] if '|' in command else command
+                    cmd_parts = base_command.split()
                     cmd_summary = cmd_parts[0] if cmd_parts else "command"
                     
                     # Create natural TTS descriptions
                     target = None
-                    if len(cmd_parts) > 1 and cmd_parts[1]:
+                    
+                    # Special handling for curl/wget - don't extract file names from URLs
+                    if cmd_summary in ['curl', 'wget']:
+                        # For curl/wget, only show the domain if it's a URL
+                        for part in cmd_parts[1:]:
+                            if part.startswith('http://') or part.startswith('https://'):
+                                # Extract just the domain
+                                try:
+                                    parsed = urlparse(part)
+                                    target = parsed.netloc if parsed.netloc else None
+                                except:
+                                    pass
+                                break
+                            elif not part.startswith('-'):
+                                # If it's a file path (not a URL), show the filename
+                                if '/' not in part and '.' in part:
+                                    target = part
+                                break
+                    elif len(cmd_parts) > 1 and cmd_parts[1]:
                         # Get just the filename/target, not full path
                         potential_target = cmd_parts[1]
                         
@@ -663,7 +684,7 @@ class NotificationHandler:
                         "sudo": "running with admin privileges",
                         "chmod": f"changing permissions on {target}" if target else "changing permissions",
                         "chown": f"changing ownership of {target}" if target else "changing ownership",
-                        "curl": "downloading from web",
+                        "curl": "fetching data",
                         "wget": "downloading file"
                     }
                     
