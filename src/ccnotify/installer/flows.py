@@ -311,21 +311,26 @@ class UpdateFlow(BaseFlow):
             if not quiet:
                 self._display_installation_status(status, update_info)
             
-            if not self._has_updates(update_info) and not config_only:
+            # Check if there are no updates AND no issues
+            if not self._has_updates(update_info) and not status.issues and not config_only:
                 if not quiet:
                     display_success_message("CCNotify is already up to date!")
                 return True
             
             # Show update options
             if not quiet and not config_only:
-                if not self._confirm_updates(update_info):
+                if not self._confirm_updates(update_info, status):
                     display_warning_message("Update cancelled by user")
                     return False
             
             # Perform updates
             if not quiet:
-                display_progress_header("Updating CCNotify", 1, 1)
-                animate_thinking("Applying updates")
+                if update_info.script_update_available or update_info.config_migration_needed:
+                    display_progress_header("Updating CCNotify", 1, 1)
+                    animate_thinking("Applying updates")
+                elif status.issues:
+                    display_progress_header("Fixing Installation Issues", 1, 1)
+                    animate_thinking("Resolving issues")
             
             # Create backup
             backup_paths = self.updater.create_backup()
@@ -378,7 +383,12 @@ class UpdateFlow(BaseFlow):
                     self.updater.cleanup_backups(backup_paths)
                     
                     if not quiet:
-                        display_success_message("CCNotify updated successfully!")
+                        if update_info.script_update_available or update_info.config_migration_needed:
+                            display_success_message("CCNotify updated successfully!")
+                        elif status.issues:
+                            display_success_message("Installation issues resolved successfully!")
+                        else:
+                            display_success_message("CCNotify updated successfully!")
                 else:
                     # Restore from backup
                     self.updater.restore_from_backup(backup_paths)
@@ -449,13 +459,27 @@ class UpdateFlow(BaseFlow):
                 update_info.config_migration_needed or 
                 update_info.model_update_available)
     
-    def _confirm_updates(self, update_info: UpdateInfo) -> bool:
+    def _confirm_updates(self, update_info: UpdateInfo, status: InstallationStatus = None) -> bool:
         """Confirm with user which updates to apply."""
-        if not update_info.recommended_actions:
+        actions_to_apply = []
+        
+        # Add version updates
+        if update_info.recommended_actions:
+            actions_to_apply.extend(update_info.recommended_actions)
+        
+        # Add issue fixes
+        if status and status.issues:
+            for issue in status.issues:
+                if "models directory missing" in issue:
+                    actions_to_apply.append("Download missing Kokoro models")
+                elif "not configured in Claude settings" in issue:
+                    actions_to_apply.append("Configure Claude hooks")
+        
+        if not actions_to_apply:
             return True
         
         console.print("[bold]The following updates will be applied:[/bold]")
-        for action in update_info.recommended_actions:
+        for action in actions_to_apply:
             console.print(f"  • {action}")
         
         return Confirm.ask("\nProceed with these updates?")
