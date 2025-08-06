@@ -19,9 +19,11 @@ class KokoroProvider(TTSProvider):
         self._kokoro = None
         self._models_dir = Path(config.get("models_dir", "models"))
         
-        # Default configuration
-        self.voice = config.get("voice", "af_sarah")
-        self.speed = float(config.get("speed", 1.0))
+        # Default configuration with enhanced options
+        self.voice = config.get("voice", "af_heart")  # Popular voices: af_heart, af_sarah, am_adam, af_sky, am_michael
+        self.speed = float(config.get("speed", 1.0))  # 0.5 = slower, 2.0 = faster
+        self.format = config.get("format", "mp3").lower()  # mp3, wav, or aiff
+        self.mp3_bitrate = config.get("mp3_bitrate", "128k")  # For MP3 encoding
         
         # Model file paths
         self.model_path = self._models_dir / "kokoro-v1.0.onnx"
@@ -96,17 +98,29 @@ class KokoroProvider(TTSProvider):
             # Generate audio
             self.logger.debug(f"Generating TTS: '{text[:50]}...' with voice={voice}, speed={speed}")
             
-            # Generate the audio data
+            # Generate the audio data (Kokoro generates WAV format)
             audio_data = self._kokoro.generate(
                 text=text,
                 voice=voice,
                 speed=speed
             )
             
-            # Save to file
+            # Save to file with format conversion if needed
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'wb') as f:
-                f.write(audio_data)
+            
+            # Get desired format from config or output path extension
+            target_format = self.format
+            if output_path.suffix:
+                # Use output path extension if specified
+                target_format = output_path.suffix[1:].lower()
+            
+            if target_format in ["mp3", "aiff"] and target_format != "wav":
+                # Convert WAV to target format using pydub
+                self._save_with_conversion(audio_data, output_path, target_format)
+            else:
+                # Save as WAV directly
+                with open(output_path, 'wb') as f:
+                    f.write(audio_data)
             
             self.log_generation(text, output_path, True, voice=voice, speed=speed)
             return True
@@ -126,7 +140,37 @@ class KokoroProvider(TTSProvider):
     
     def get_file_extension(self) -> str:
         """Get the file extension for Kokoro audio files"""
-        return ".wav"
+        return f".{self.format}"
+    
+    def _save_with_conversion(self, audio_data: bytes, output_path: Path, format: str):
+        """Convert WAV audio data to another format and save"""
+        try:
+            from pydub import AudioSegment
+            import io
+            
+            # Load WAV data into AudioSegment
+            audio = AudioSegment.from_wav(io.BytesIO(audio_data))
+            
+            # Export to desired format
+            if format == "mp3":
+                audio.export(output_path, format="mp3", bitrate=self.mp3_bitrate)
+                self.logger.debug(f"Converted to MP3 with bitrate {self.mp3_bitrate}")
+            elif format == "aiff":
+                audio.export(output_path, format="aiff")
+                self.logger.debug(f"Converted to AIFF")
+            else:
+                # Fallback to WAV
+                with open(output_path, 'wb') as f:
+                    f.write(audio_data)
+        except ImportError:
+            # If pydub is not available, save as WAV
+            self.logger.warning("pydub not available for format conversion, saving as WAV")
+            with open(output_path, 'wb') as f:
+                f.write(audio_data)
+        except Exception as e:
+            self.logger.error(f"Format conversion failed: {e}, saving as WAV")
+            with open(output_path, 'wb') as f:
+                f.write(audio_data)
     
     def _validate_voice(self, voice: str) -> str:
         """

@@ -47,11 +47,15 @@ class BaseFlow:
                 setup_result = setup_kokoro(force_download=False)
                 
                 if setup_result:
-                    # Include models_dir in config
+                    # Include enhanced Kokoro configuration
                     return {
                         "tts_provider": "kokoro", 
                         "models_downloaded": True,
-                        "models_dir": str(self.ccnotify_dir / "models")
+                        "models_dir": str(self.ccnotify_dir / "models"),
+                        "voice": "af_heart",  # Popular voices: af_heart, af_sarah, am_adam, af_sky, am_michael
+                        "speed": 1.0,  # 0.5 = slower, 2.0 = faster
+                        "format": "mp3",  # mp3 for smaller files, wav for quality, aiff for Mac compatibility
+                        "mp3_bitrate": "128k"  # For MP3 encoding quality
                     }
                 else:
                     console.print(f"[red]Failed to download Kokoro models[/red]")
@@ -183,8 +187,14 @@ class FirstTimeFlow(BaseFlow):
     def _setup_tts_provider(self, quiet: bool = False) -> Optional[Dict[str, Any]]:
         """Setup TTS provider with user interaction."""
         if quiet:
-            # Default to Kokoro in quiet mode
-            return {"tts_provider": "kokoro"}
+            # Default to Kokoro in quiet mode with enhanced config
+            return {
+                "tts_provider": "kokoro",
+                "voice": "af_heart",
+                "speed": 1.0,
+                "format": "mp3",
+                "mp3_bitrate": "128k"
+            }
         
         # Show provider options
         table = Table(title="TTS Provider Options")

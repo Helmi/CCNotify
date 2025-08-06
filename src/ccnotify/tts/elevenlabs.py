@@ -4,8 +4,14 @@ ElevenLabs TTS provider - Premium cloud-based text-to-speech
 
 from pathlib import Path
 from typing import Dict, Any
-import requests
 import logging
+
+# Import requests only when needed
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
 
 from .base import TTSProvider, TTSProviderNotAvailable, TTSGenerationError
 
@@ -33,6 +39,10 @@ class ElevenLabsProvider(TTSProvider):
     
     def is_available(self) -> bool:
         """Check if ElevenLabs TTS is available"""
+        if not REQUESTS_AVAILABLE:
+            self.logger.warning("requests library not installed - needed for ElevenLabs")
+            return False
+            
         if not self.api_key:
             self.logger.warning("ElevenLabs API key not configured")
             return False

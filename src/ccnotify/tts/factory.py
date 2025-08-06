@@ -96,8 +96,10 @@ def _build_provider_config(provider_name: str, base_config: Dict[str, Any]) -> D
     if provider_name == "kokoro":
         config.update({
             "models_dir": base_config.get("models_dir", "models"),
-            "voice": os.getenv("KOKORO_VOICE", base_config.get("voice", "af_sarah")),
+            "voice": os.getenv("KOKORO_VOICE", base_config.get("voice", "af_heart")),
             "speed": os.getenv("KOKORO_SPEED", base_config.get("speed", "1.0")),
+            "format": os.getenv("KOKORO_FORMAT", base_config.get("format", "mp3")),
+            "mp3_bitrate": os.getenv("KOKORO_MP3_BITRATE", base_config.get("mp3_bitrate", "128k")),
         })
     
     elif provider_name == "elevenlabs":

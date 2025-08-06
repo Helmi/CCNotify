@@ -1,0 +1,25 @@
+{
+  "config_version": "1.0",
+  "tts_provider": "kokoro",
+  "models_downloaded": true,
+  "models_dir": "/Users/helmi/.claude/ccnotify/models",
+  
+  "_comment_voice": "Popular voices: af_heart (female), af_sarah (female), am_adam (male), af_sky (female), am_michael (male)",
+  "voice": "af_heart",
+  
+  "_comment_speed": "Speed multiplier: 0.5 = slower, 1.0 = normal, 2.0 = faster",
+  "speed": 1.0,
+  
+  "_comment_format": "Audio format: mp3 (smaller), wav (quality), aiff (Mac native)",
+  "format": "mp3",
+  
+  "_comment_mp3": "MP3 bitrate: 64k (smallest), 128k (balanced), 192k (high quality)",
+  "mp3_bitrate": "128k",
+  
+  "_available_voices": [
+    "af_heart", "af_sarah", "af_sky", "af_bella", "af_nicole",
+    "am_adam", "am_michael", "am_liam", "am_jason",
+    "bf_emma", "bf_isabella", 
+    "bm_george", "bm_lewis"
+  ]
+}

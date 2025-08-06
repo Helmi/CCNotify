@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 # /// script
 # requires-python = ">=3.9"
@@ -62,9 +62,9 @@ PROJECTS_DIR = Path.home() / ".claude" / "projects"
 SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Environment variables (will be reloaded in main() if .env exists)
-USE_TTS = os.getenv("USE_TTS", "false").lower() == "true"
+USE_TTS = os.getenv("USE_TTS", "true").lower() == "true"  # Default to true to use TTS providers
 USE_LOGGING = os.getenv("USE_LOGGING", "false").lower() == "true"
-TTS_PROVIDER = os.getenv("TTS_PROVIDER", "macos_say")  # Options: macos_say, elevenlabs, kokoro
+TTS_PROVIDER = os.getenv("TTS_PROVIDER", "kokoro")  # Options: macos_say, elevenlabs, kokoro
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel
 ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")  # Flash 2.5
@@ -260,8 +260,31 @@ def resolve_project_name(session_id: str, cwd: str = None) -> str:
             actual_project_path = decode_project_folder_name(folder_name)
             
             if actual_project_path:
-                # Extract project name from the actual path
-                project_name = Path(actual_project_path).name
+                # Extract meaningful project name from the actual path
+                # For paths like /Users/helmi/code/agent/zero, we want "zero" or "agent-zero"
+                path_parts = Path(actual_project_path).parts
+                
+                # Look for common project parent directories
+                common_parents = ["code", "projects", "dev", "work", "repos", "src", "Documents", "Desktop"]
+                project_name = Path(actual_project_path).name  # Default to last part
+                
+                # Try to find a more meaningful project name
+                for i, part in enumerate(path_parts):
+                    if part in common_parents and i + 1 < len(path_parts):
+                        # Use everything after the common parent as the project name
+                        remaining_parts = path_parts[i + 1:]
+                        if len(remaining_parts) == 1:
+                            project_name = remaining_parts[0]
+                        else:
+                            # For nested projects like code/agent/zero, use "agent-zero" or just "zero"
+                            # depending on the depth
+                            if len(remaining_parts) == 2:
+                                # Use hyphenated form for two-level projects
+                                project_name = "-".join(remaining_parts)
+                            else:
+                                # For deeper nesting, just use the last part
+                                project_name = remaining_parts[-1]
+                        break
                 
                 # Validate against cwd if provided
                 if cwd and not is_cwd_under_project(cwd, actual_project_path):
@@ -415,7 +438,8 @@ class NotificationHandler:
     def get_notification_sound(self, event_type: str, custom_text: str = "") -> Optional[Path]:
         """Get or generate sound for notification"""
         if not USE_TTS or not self.tts_provider:
-            return self._get_fallback_sound(event_type)
+            logger.warning("TTS not available - no sound will be played")
+            return None
         
         # Default texts for each event type
         default_texts = {
@@ -448,42 +472,12 @@ class NotificationHandler:
                 logger.info(f"Generated {TTS_PROVIDER} TTS: {text_to_speak}")
                 return sound_file
             else:
-                logger.warning(f"TTS generation failed, using fallback")
-                return self._get_fallback_sound(event_type)
+                logger.warning(f"TTS generation failed")
+                return None
         
         except Exception as e:
             logger.error(f"TTS generation error: {e}")
-            return self._get_fallback_sound(event_type)
-    
-    def _get_fallback_sound(self, event_type: str) -> Optional[Path]:
-        """Get fallback sound using macOS say command"""
-        default_texts = {
-            "tool_activity": "Tool activity",
-            "execution_complete": "Task complete", 
-            "subagent_done": "Sub agent done",
-            "error": "Error occurred",
-            "tool_blocked": "Tool blocked",
-            "compaction": "Compacting context",
-            "input_needed": "Input needed"
-        }
-        
-        sound_file = SOUNDS_DIR / f"{event_type}.aiff"
-        
-        if not sound_file.exists():
-            text = default_texts.get(event_type, "Claude notification")
-            try:
-                subprocess.run([
-                    "say", "-o", str(sound_file),
-                    "--file-format=AIFF",
-                    "-v", "Samantha",
-                    text
-                ], check=True)
-                logger.debug(f"Generated fallback TTS file: {sound_file}")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to generate fallback TTS: {e}")
-                return None
-        
-        return sound_file if sound_file.exists() else None
+            return None
     
     def handle_hook(self, hook_data: Dict[str, Any]):
         """Process hook data and generate appropriate notification"""
@@ -550,16 +544,48 @@ class NotificationHandler:
                     # Extract the command and first argument for cleaner message
                     cmd_parts = command.split()
                     cmd_summary = cmd_parts[0] if cmd_parts else "command"
+                    
+                    # Create natural TTS descriptions
+                    target = None
                     if len(cmd_parts) > 1 and cmd_parts[1]:
                         # Get just the filename/target, not full path
                         target = Path(cmd_parts[1]).name if '/' in cmd_parts[1] else cmd_parts[1]
+                        # Remove flags from target
+                        if target.startswith('-'):
+                            target = Path(cmd_parts[-1]).name if len(cmd_parts) > 2 else None
+                    
+                    # Generate human-friendly descriptions for TTS
+                    tts_descriptions = {
+                        "rm": f"removing {target}" if target else "removing files",
+                        "rm -rf": f"force removing {target}" if target else "force removing files",
+                        "rm -r": f"removing directory {target}" if target else "removing directory",
+                        "mv": f"moving {target}" if target else "moving files",
+                        "cp": f"copying {target}" if target else "copying files",
+                        "sudo": "running with admin privileges",
+                        "chmod": f"changing permissions on {target}" if target else "changing permissions",
+                        "chown": f"changing ownership of {target}" if target else "changing ownership",
+                        "curl": f"downloading from web",
+                        "wget": f"downloading file"
+                    }
+                    
+                    # Check for specific command patterns
+                    if cmd_summary == "rm" and "-rf" in command:
+                        audio_desc = tts_descriptions["rm -rf"]
+                    elif cmd_summary == "rm" and "-r" in command:
+                        audio_desc = tts_descriptions["rm -r"]
+                    elif cmd_summary in tts_descriptions:
+                        audio_desc = tts_descriptions[cmd_summary]
+                    else:
+                        audio_desc = f"running {cmd_summary}"
+                    
+                    # Build messages
+                    if target:
                         message = f"[{display_project_name}] Running {cmd_summary} on {target}"
                     else:
                         message = f"[{display_project_name}] Running {cmd_summary}"
                     
-                    # Apply command replacement for audio
-                    audio_command_desc = apply_command_replacement(command, replacements)
-                    custom_tts = f"{display_project_name}, {audio_command_desc}"
+                    # Natural TTS message
+                    custom_tts = f"{display_project_name}, {audio_desc}"
             
             # Skip most file edits unless they're system files
             elif tool_name in ["Write", "MultiEdit", "Edit"]:
@@ -569,8 +595,17 @@ class NotificationHandler:
                 if any(x in file_path for x in ["/etc/", "/usr/", ".env", "config", "secret"]):
                     event_type = "tool_activity"
                     file_name = Path(file_path).name
-                    message = f"[{display_project_name}] Editing {file_name}"
-                    custom_tts = f"{display_project_name}, editing {file_name}"
+                    
+                    # More natural descriptions based on tool
+                    if tool_name == "Write":
+                        action_desc = "writing"
+                    elif tool_name == "MultiEdit":
+                        action_desc = "multi-editing"
+                    else:
+                        action_desc = "editing"
+                    
+                    message = f"[{display_project_name}] {action_desc.capitalize()} {file_name}"
+                    custom_tts = f"{display_project_name}, {action_desc} {file_name}"
         
         elif hook_type == "PostToolUse":
             # Check for errors in tool response
@@ -593,12 +628,12 @@ class NotificationHandler:
         elif hook_type == "Stop":
             event_type = "execution_complete"
             message = f"[{display_project_name}] Task complete"
-            custom_tts = f"{display_project_name}, task complete"
+            custom_tts = f"{display_project_name}, task completed successfully"
         
         elif hook_type == "SubagentStop":
             event_type = "subagent_done"
             message = f"[{display_project_name}] Subagent finished"
-            custom_tts = f"{display_project_name}, sub agent done"
+            custom_tts = f"{display_project_name}, sub agent finished"
         
         elif hook_type == "PreCompact":
             event_type = "compaction"
@@ -662,9 +697,9 @@ def main():
             load_dotenv(env_file)
             # Re-read environment variables after loading .env
             global USE_TTS, USE_LOGGING, TTS_PROVIDER, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID, KOKORO_VOICE, KOKORO_PATH, KOKORO_SPEED
-            USE_TTS = os.getenv("USE_TTS", "false").lower() == "true"
+            USE_TTS = os.getenv("USE_TTS", "true").lower() == "true"
             USE_LOGGING = os.getenv("USE_LOGGING", "false").lower() == "true"
-            TTS_PROVIDER = os.getenv("TTS_PROVIDER", "macos_say")
+            TTS_PROVIDER = os.getenv("TTS_PROVIDER", "kokoro")
             ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
             ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
             ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
