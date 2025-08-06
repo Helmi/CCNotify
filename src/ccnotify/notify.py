@@ -42,13 +42,102 @@ except ImportError:
     # Dependencies will be auto-installed via uv
     pass
 
-# Import our TTS provider system
-try:
-    from src.ccnotify.tts import get_tts_provider, TTSProvider
-except ImportError:
-    # Fallback for standalone usage
-    get_tts_provider = None
-    TTSProvider = None
+# Embedded Kokoro TTS provider for standalone usage
+import io
+import hashlib
+
+
+class KokoroTTSProvider:
+    """Minimal embedded Kokoro TTS provider"""
+    
+    def __init__(self, models_dir: Path):
+        self.models_dir = Path(models_dir)
+        self.model_path = self.models_dir / "kokoro-v1.0.onnx"
+        self.voices_path = self.models_dir / "voices-v1.0.bin"
+        self._kokoro = None
+        self.voice = "af_heart"  # Better default voice
+        self.speed = 1.0
+        self.format = "mp3"  # Default to MP3
+        self.mp3_bitrate = "128k"
+        
+    def is_available(self) -> bool:
+        """Check if Kokoro is available"""
+        try:
+            # Check model files exist
+            if not self.model_path.exists():
+                logger.warning(f"Kokoro model not found: {self.model_path}")
+                return False
+            if not self.voices_path.exists():
+                logger.warning(f"Kokoro voices not found: {self.voices_path}")
+                return False
+            
+            # Try to import kokoro
+            from kokoro_onnx import Kokoro
+            self._kokoro = Kokoro(str(self.model_path), str(self.voices_path))
+            logger.debug(f"Kokoro TTS initialized successfully with models from {self.models_dir}")
+            return True
+        except ImportError as e:
+            logger.warning(f"Kokoro import failed: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Kokoro initialization failed: {e}")
+            return False
+            
+    def get_cache_key(self, text: str) -> str:
+        """Generate cache key for text"""
+        return hashlib.md5(text.encode()).hexdigest()[:16]
+        
+    def get_file_extension(self) -> str:
+        """Get file extension based on format"""
+        if self.format == "mp3":
+            return ".mp3"
+        elif self.format == "aiff":
+            return ".aiff"
+        else:
+            return ".wav"
+            
+    def generate(self, text: str, output_path: Path) -> bool:
+        """Generate TTS audio"""
+        try:
+            if not self._kokoro:
+                from kokoro_onnx import Kokoro
+                self._kokoro = Kokoro(str(self.model_path), str(self.voices_path))
+                
+            # Generate audio with Kokoro (returns numpy array and sample rate)
+            audio_array, sample_rate = self._kokoro.create(
+                text=text,
+                voice=self.voice,
+                speed=self.speed
+            )
+            
+            # Convert numpy array to WAV bytes
+            import soundfile
+            wav_buffer = io.BytesIO()
+            soundfile.write(wav_buffer, audio_array, sample_rate, format='WAV')
+            audio_data = wav_buffer.getvalue()
+            
+            # Save based on format
+            if self.format == "mp3":
+                # Convert to MP3 using pydub
+                try:
+                    from pydub import AudioSegment
+                    audio = AudioSegment.from_wav(io.BytesIO(audio_data))
+                    audio.export(str(output_path), format="mp3", bitrate=self.mp3_bitrate)
+                except ImportError:
+                    # Fallback to WAV if pydub not available
+                    output_path = output_path.with_suffix(".wav")
+                    with open(output_path, 'wb') as f:
+                        f.write(audio_data)
+            else:
+                # Save as WAV
+                with open(output_path, 'wb') as f:
+                    f.write(audio_data)
+                    
+            return True
+            
+        except Exception as e:
+            logger.error(f"TTS generation failed: {e}")
+            return False
 
 # Configuration
 BASE_DIR = Path.home() / ".claude" / "ccnotify"
@@ -378,8 +467,8 @@ class NotificationHandler:
         
     def _init_tts_provider(self):
         """Initialize TTS provider"""
-        if not USE_TTS or not get_tts_provider:
-            logger.debug("TTS disabled or provider system not available")
+        if not USE_TTS:
+            logger.debug("TTS disabled")
             return
             
         try:
@@ -393,24 +482,25 @@ class NotificationHandler:
                 except Exception:
                     pass
             
-            # Build TTS configuration
-            tts_config = {
-                "provider": TTS_PROVIDER,
-                "models_dir": config.get("models_dir", str(BASE_DIR / "models")),  # Use config or default
-                # Kokoro config
-                "voice": KOKORO_VOICE,
-                "speed": KOKORO_SPEED,
-                # ElevenLabs config
-                "api_key": ELEVENLABS_API_KEY,
-                "voice_id": ELEVENLABS_VOICE_ID,
-                "model_id": ELEVENLABS_MODEL_ID,
-            }
-            
-            self.tts_provider = get_tts_provider(TTS_PROVIDER, tts_config, fallback=True)
-            if self.tts_provider:
-                logger.info(f"Initialized TTS provider: {TTS_PROVIDER}")
+            # Use embedded Kokoro provider
+            if TTS_PROVIDER == "kokoro":
+                models_dir = config.get("models_dir", str(BASE_DIR / "models"))
+                self.tts_provider = KokoroTTSProvider(models_dir)
+                
+                # Configure from environment/config
+                self.tts_provider.voice = config.get("voice", KOKORO_VOICE)
+                self.tts_provider.speed = float(config.get("speed", KOKORO_SPEED))
+                self.tts_provider.format = config.get("format", "mp3").lower()
+                self.tts_provider.mp3_bitrate = config.get("mp3_bitrate", "128k")
+                
+                if self.tts_provider.is_available():
+                    logger.info(f"Initialized embedded Kokoro TTS provider")
+                else:
+                    logger.warning("Kokoro TTS not available - models may not be downloaded")
+                    self.tts_provider = None
             else:
-                logger.warning("No TTS provider available")
+                logger.warning(f"Unsupported TTS provider: {TTS_PROVIDER}")
+                self.tts_provider = None
                 
         except Exception as e:
             logger.error(f"Failed to initialize TTS provider: {e}")
