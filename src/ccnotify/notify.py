@@ -639,10 +639,19 @@ class NotificationHandler:
                     target = None
                     if len(cmd_parts) > 1 and cmd_parts[1]:
                         # Get just the filename/target, not full path
-                        target = Path(cmd_parts[1]).name if '/' in cmd_parts[1] else cmd_parts[1]
-                        # Remove flags from target
-                        if target.startswith('-'):
-                            target = Path(cmd_parts[-1]).name if len(cmd_parts) > 2 else None
+                        potential_target = cmd_parts[1]
+                        
+                        # Skip if it looks like code or complex syntax
+                        if any(char in potential_target for char in ['(', ')', '[', ']', '{', '}', '"', "'", '|', ';']):
+                            target = None
+                        elif potential_target.startswith('-'):
+                            # It's a flag, try to find a real target
+                            for part in cmd_parts[2:]:
+                                if not part.startswith('-') and not any(char in part for char in ['(', ')', '[', ']', '{', '}', '"', "'", '|', ';']):
+                                    target = Path(part).name if '/' in part else part
+                                    break
+                        else:
+                            target = Path(potential_target).name if '/' in potential_target else potential_target
                     
                     # Generate human-friendly descriptions for TTS
                     tts_descriptions = {
@@ -654,8 +663,8 @@ class NotificationHandler:
                         "sudo": "running with admin privileges",
                         "chmod": f"changing permissions on {target}" if target else "changing permissions",
                         "chown": f"changing ownership of {target}" if target else "changing ownership",
-                        "curl": f"downloading from web",
-                        "wget": f"downloading file"
+                        "curl": "downloading from web",
+                        "wget": "downloading file"
                     }
                     
                     # Check for specific command patterns
@@ -669,7 +678,7 @@ class NotificationHandler:
                         audio_desc = f"running {cmd_summary}"
                     
                     # Build messages
-                    if target:
+                    if target and len(target) < 50:  # Sanity check on target length
                         message = f"[{display_project_name}] Running {cmd_summary} on {target}"
                     else:
                         message = f"[{display_project_name}] Running {cmd_summary}"
