@@ -112,16 +112,20 @@ __version__ = "0.1.3"
     def create_claude_settings(self, with_hooks: bool = False):
         """Create Claude settings.json."""
         settings = {
-            "hooks": {
-                "preToolUse": [],
-                "postToolUse": []
-            }
+            "hooks": {}
         }
         
         if with_hooks:
             script_path = str(self.ccnotify_dir / "ccnotify.py")
-            settings["hooks"]["preToolUse"] = [{"command": f"python {script_path}"}]
-            settings["hooks"]["postToolUse"] = [{"command": f"python {script_path}"}]
+            hook_config = {
+                "matcher": ".*",
+                "hooks": [{
+                    "type": "command",
+                    "command": f"uv run {script_path}"
+                }]
+            }
+            settings["hooks"]["PreToolUse"] = [hook_config]
+            settings["hooks"]["PostToolUse"] = [hook_config]
             
         settings_file = self.claude_dir / "settings.json"
         settings_file.write_text(json.dumps(settings, indent=2))
@@ -330,6 +334,79 @@ def test_version_consistency():
         return False
 
 
+def test_hook_installation_no_duplication():
+    """Test that hooks are not duplicated when running installer multiple times."""
+    print("\n🪝 Testing hook installation doesn't duplicate...")
+    
+    with TestEnvironment("hook_duplication") as env:
+        # Create a settings.json with hooks already configured
+        settings = {
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": ".*",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "uv run /Users/helmi/.claude/ccnotify/ccnotify.py"
+                    }]
+                }],
+                "PostToolUse": [{
+                    "matcher": ".*",
+                    "hooks": [{
+                        "type": "command",
+                        "command": "uv run /Users/helmi/.claude/ccnotify/ccnotify.py"
+                    }]
+                }]
+            },
+            "hooksEnabled": True
+        }
+        
+        settings_file = env.claude_dir / "settings.json"
+        settings_file.write_text(json.dumps(settings, indent=2))
+        
+        # Create ccnotify installation
+        env.ccnotify_dir.mkdir(parents=True)
+        script = env.ccnotify_dir / "ccnotify.py"
+        script.write_text('#!/usr/bin/env python3\nprint("test")')
+        script.chmod(0o755)
+        
+        # Import the update function
+        from ccnotify.cli import update_claude_settings
+        
+        # Run update_claude_settings (should detect existing hooks and not duplicate)
+        script_path = str(env.ccnotify_dir / "ccnotify.py")
+        update_claude_settings(script_path)
+        
+        # Check that hooks weren't duplicated
+        with open(settings_file) as f:
+            new_settings = json.load(f)
+        
+        pre_hooks = new_settings["hooks"]["PreToolUse"]
+        post_hooks = new_settings["hooks"]["PostToolUse"]
+        
+        # Should still have only 1 hook entry per event
+        if len(pre_hooks) == 1 and len(post_hooks) == 1:
+            print("✅ Hooks not duplicated - still 1 entry per event")
+            
+            # Run again to be sure
+            update_claude_settings(script_path)
+            
+            with open(settings_file) as f:
+                final_settings = json.load(f)
+            
+            final_pre = final_settings["hooks"]["PreToolUse"]
+            final_post = final_settings["hooks"]["PostToolUse"]
+            
+            if len(final_pre) == 1 and len(final_post) == 1:
+                print("✅ Multiple runs don't duplicate hooks")
+                return True
+            else:
+                print(f"❌ Hooks duplicated on second run: Pre={len(final_pre)}, Post={len(final_post)}")
+                return False
+        else:
+            print(f"❌ Hooks duplicated: Pre={len(pre_hooks)}, Post={len(post_hooks)}")
+            return False
+
+
 def test_installer_detector_accuracy():
     """Test that InstallationDetector correctly identifies issues."""
     print("\n🔍 Testing installation detector accuracy...")
@@ -390,6 +467,7 @@ def run_all_tests():
         ("Update Flow Fixes Issues with Current Version", test_update_flow_fixes_issues_without_version_update),
         ("Models Install in Correct Directory", test_models_install_in_correct_directory),
         ("Config Preserved During Update", test_config_preserved_during_update),
+        ("Hook Installation No Duplication", test_hook_installation_no_duplication),
         ("Installation Detector Accuracy", test_installer_detector_accuracy),
     ]
     

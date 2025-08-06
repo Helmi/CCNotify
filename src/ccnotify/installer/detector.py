@@ -208,19 +208,17 @@ class InstallationDetector:
             hooks = settings.get("hooks", {})
             
             # Look for ccnotify.py in any hook configuration
+            # Structure: {"hooks": {"PreToolUse": [{"matcher": ".*", "hooks": [{"command": "..."}]}]}}
             for hook_name, hook_list in hooks.items():
                 if isinstance(hook_list, list):
-                    # Hooks are arrays of hook objects
-                    for hook in hook_list:
-                        if isinstance(hook, dict):
-                            command = hook.get("command", "")
-                            if "ccnotify.py" in command:
-                                return True
-                elif isinstance(hook_list, dict):
-                    # Legacy format (if it exists)
-                    command = hook_list.get("command", "")
-                    if "ccnotify.py" in command:
-                        return True
+                    for entry in hook_list:
+                        if isinstance(entry, dict) and "hooks" in entry:
+                            # Check the nested hooks array
+                            for hook in entry.get("hooks", []):
+                                if isinstance(hook, dict):
+                                    command = hook.get("command", "")
+                                    if "ccnotify.py" in command:
+                                        return True
                         
         except Exception:
             pass

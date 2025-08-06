@@ -5,7 +5,11 @@ CCNotify CLI - Simplified single-command installer for ccnotify
 
 import argparse
 import sys
+import warnings
 from rich.console import Console
+
+# Suppress pydub's regex warnings
+warnings.filterwarnings("ignore", message=r".*invalid escape sequence.*", category=SyntaxWarning)
 
 from .installer import InstallationDetector, FirstTimeFlow, UpdateFlow
 from .installer.welcome import display_error_message
@@ -207,11 +211,18 @@ def update_claude_settings(script_path: str) -> bool:
                 settings["hooks"][event] = []
             
             # Check if our hook is already configured
-            hook_exists = any(
-                h.get("command", "").endswith(str(script_path)) 
-                for h in settings["hooks"][event]
-                if isinstance(h, dict)
-            )
+            # Hook structure: {"matcher": ".*", "hooks": [{"type": "command", "command": "..."}]}
+            hook_exists = False
+            for entry in settings["hooks"][event]:
+                if isinstance(entry, dict) and "hooks" in entry:
+                    for hook in entry.get("hooks", []):
+                        if isinstance(hook, dict):
+                            command = hook.get("command", "")
+                            if "ccnotify.py" in command or command.endswith(str(script_path)):
+                                hook_exists = True
+                                break
+                if hook_exists:
+                    break
             
             if not hook_exists:
                 settings["hooks"][event].append({
