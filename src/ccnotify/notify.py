@@ -420,10 +420,27 @@ def load_replacements() -> Dict[str, Any]:
 
 
 def apply_project_name_replacement(project_name: str, replacements: Dict[str, Any]) -> str:
-    """Apply project name replacement"""
+    """Apply project name replacement for display"""
     project_replacements = replacements.get("project_names", {}).get("replacements", {})
     
     # Case-insensitive matching
+    for original, replacement in project_replacements.items():
+        if project_name.lower() == original.lower():
+            return replacement
+    
+    return project_name
+
+
+def get_project_pronunciation(project_name: str, replacements: Dict[str, Any]) -> str:
+    """Get the pronunciation for a project name for TTS"""
+    # First check auto-discovered pronunciations
+    auto_discovered = replacements.get("_auto_discovered", {}).get("projects", {})
+    for proj_key, proj_data in auto_discovered.items():
+        if proj_key.lower() == project_name.lower():
+            return proj_data.get("pronunciation", project_name)
+    
+    # Fall back to project_names replacements
+    project_replacements = replacements.get("project_names", {}).get("replacements", {})
     for original, replacement in project_replacements.items():
         if project_name.lower() == original.lower():
             return replacement
@@ -545,6 +562,7 @@ class NotificationHandler:
         
         # Determine text to speak
         text_to_speak = custom_text if custom_text else default_texts.get(event_type, "Claude notification")
+        logger.debug(f"TTS text: '{text_to_speak}'")
         
         # Generate cache key and file path
         cache_key = self.tts_provider.get_cache_key(text_to_speak)
@@ -609,8 +627,9 @@ class NotificationHandler:
             project_name = resolve_project_name(session_id, cwd)
             logger.info(f"Resolved project name from session: {project_name}")
         
-        # Apply project name replacement
+        # Apply project name replacement for display and TTS
         display_project_name = apply_project_name_replacement(project_name, replacements)
+        tts_project_name = get_project_pronunciation(project_name, replacements)
         
         cwd_name = Path(cwd).name if cwd else "unknown"
         
@@ -705,7 +724,7 @@ class NotificationHandler:
                         message = f"[{display_project_name}] Running {cmd_summary}"
                     
                     # Natural TTS message
-                    custom_tts = f"{display_project_name}, {audio_desc}"
+                    custom_tts = f"{tts_project_name}, {audio_desc}"
             
             # Skip most file edits unless they're system files
             elif tool_name in ["Write", "MultiEdit", "Edit"]:
@@ -725,7 +744,7 @@ class NotificationHandler:
                         action_desc = "editing"
                     
                     message = f"[{display_project_name}] {action_desc.capitalize()} {file_name}"
-                    custom_tts = f"{display_project_name}, {action_desc} {file_name}"
+                    custom_tts = f"{tts_project_name}, {action_desc} {file_name}"
         
         elif hook_type == "PostToolUse":
             # Check for errors in tool response
@@ -743,17 +762,17 @@ class NotificationHandler:
                 event_type = "error"
                 error_msg = tool_response.get("error", tool_response.get("message", "Unknown error"))
                 message = f"[{display_project_name}] Error in {tool_name}: {str(error_msg)[:100]}"
-                custom_tts = f"{display_project_name}, {tool_name} failed"
+                custom_tts = f"{tts_project_name}, {tool_name} failed"
         
         elif hook_type == "Stop":
             event_type = "execution_complete"
             message = f"[{display_project_name}] Task complete"
-            custom_tts = f"{display_project_name}, task completed successfully"
+            custom_tts = f"{tts_project_name}, task completed successfully"
         
         elif hook_type == "SubagentStop":
             event_type = "subagent_done"
             message = f"[{display_project_name}] Subagent finished"
-            custom_tts = f"{display_project_name}, sub agent finished"
+            custom_tts = f"{tts_project_name}, sub agent finished"
         
         elif hook_type == "PreCompact":
             event_type = "compaction"
@@ -778,13 +797,13 @@ class NotificationHandler:
                     if tool_match:
                         tool_requested = tool_match.group(1)
                         message = f"[{display_project_name}] Permission needed for {tool_requested}"
-                        custom_tts = f"{display_project_name}, needs permission for {tool_requested}"
+                        custom_tts = f"{tts_project_name}, needs permission for {tool_requested}"
                     else:
                         message = f"[{display_project_name}] {raw_message}"
-                        custom_tts = f"{display_project_name}, {raw_message}"
+                        custom_tts = f"{tts_project_name}, {raw_message}"
                 else:
                     message = f"[{display_project_name}] Input needed"
-                    custom_tts = f"{display_project_name}, input needed"
+                    custom_tts = f"{tts_project_name}, input needed"
         
         # Send notification if we have an event
         if event_type and message:
