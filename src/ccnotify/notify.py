@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-__version__ = "0.1.11"
+__version__ = "0.1.12"
 
 # /// script
 # requires-python = ">=3.9"
