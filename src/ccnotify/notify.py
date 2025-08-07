@@ -549,11 +549,11 @@ class NotificationHandler:
         # Generate cache key and file path
         cache_key = self.tts_provider.get_cache_key(text_to_speak)
         file_extension = self.tts_provider.get_file_extension()
-        sound_file = SOUNDS_DIR / f"{TTS_PROVIDER}_{event_type}_{cache_key}{file_extension}"
+        sound_file = SOUNDS_DIR / f"{event_type}_{cache_key}{file_extension}"
         
         # Use cached file if exists
         if sound_file.exists():
-            logger.debug(f"Using cached {TTS_PROVIDER} sound: {sound_file}")
+            logger.debug(f"Using cached sound: {sound_file}")
             return sound_file
         
         # Generate new sound file
