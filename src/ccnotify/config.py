@@ -73,7 +73,7 @@ def get_default_config() -> Dict[str, Any]:
         },
         "kokoro": {
             "models_dir": str(get_models_dir()),
-            "voice": "af_sarah",
+            "voice": "af_heart",
             "speed": "1.0"
         },
         "elevenlabs": {

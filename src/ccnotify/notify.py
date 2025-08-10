@@ -158,7 +158,7 @@ TTS_PROVIDER = os.getenv("TTS_PROVIDER", "kokoro")  # Options: macos_say, eleven
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel
 ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")  # Flash 2.5
-KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
+KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_heart")
 # KOKORO_PATH is now determined from config file
 KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")  # Speed multiplier (0.5-2.0)
 
@@ -871,7 +871,7 @@ def main():
             ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
             ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
             ELEVENLABS_MODEL_ID = os.getenv("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
-            KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_sarah")
+            KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_heart")
             # KOKORO_PATH is now determined from config file
             KOKORO_SPEED = os.getenv("KOKORO_SPEED", "1.0")
     except ImportError:

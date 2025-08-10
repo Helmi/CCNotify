@@ -157,7 +157,7 @@ def setup_kokoro(force_download: bool = False) -> bool:
         print("✅ Kokoro TTS setup completed successfully!")
         print("\nTo use Kokoro TTS:")
         print("1. Set TTS_PROVIDER=kokoro in your .env file")
-        print("2. Configure KOKORO_VOICE (e.g., af_sarah, am_adam)")
+        print("2. Configure KOKORO_VOICE (e.g., af_heart, am_adam)")
         print("3. Optionally set KOKORO_SPEED (0.5-2.0)")
         
         # Test installation
@@ -167,7 +167,7 @@ def setup_kokoro(force_download: bool = False) -> bool:
             # Create proper config for KokoroProvider
             test_config = {
                 "models_dir": str(models_dir),
-                "voice": "af_sarah",
+                "voice": "af_heart",
                 "speed": 1.0
             }
             provider = KokoroProvider(test_config)
@@ -212,7 +212,7 @@ def list_voices() -> None:
         print()
     
     print("💡 Voice Blending Examples:")
-    print("  • af_sarah:60,am_adam:40  (60% Sarah + 40% Adam)")
+    print("  • af_heart:60,am_adam:40  (60% Heart + 40% Adam)")
     print("  • af_bella:80,af_nova:20  (80% Bella + 20% Nova)")
 
 

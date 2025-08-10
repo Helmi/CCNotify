@@ -81,13 +81,15 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 ```json
 {
   "tts_provider": "kokoro",
-  "voice": "af_sarah",
+  "voice": "af_heart",
   "speed": 1.0,
   "format": "mp3",
   "mp3_bitrate": "128k",
   "models_dir": "~/.claude/ccnotify/models"
 }
 ```
+
+> **Note:** `af_heart` is recommended as it provides the highest quality English pronunciation among Kokoro voices.
 
 **For Cloud TTS (ElevenLabs):**
 
@@ -102,25 +104,31 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 
 **Voice Options:**
 
-- **Kokoro**: `af_sarah`, `am_adam`, `bf_alice`, `bm_daniel` and [40+ others](https://github.com/thewh1teagle/kokoro-onnx)
+- **Kokoro**: `af_heart` (recommended), `af_sarah`, `am_adam`, `bf_alice`, `bm_daniel` and [40+ others](https://github.com/thewh1teagle/kokoro-onnx)
 - **ElevenLabs**: Use voice IDs from your [ElevenLabs account](https://try.elevenlabs.io/ist8m7h95ed2)
 
 **Pronunciation Customization:**
 
-Customize how project names are pronounced by editing `~/.claude/ccnotify/replacements.json`. CCNotify automatically discovers your projects and you can adjust their pronunciation:
+Customize how project names and commands are pronounced by editing `~/.claude/ccnotify/replacements.json`. CCNotify automatically discovers your projects and you can adjust their pronunciation:
 
 ```json
 {
-  "_auto_discovered": {
-    "projects": {
-      "agent-zero": {
-        "pronunciation": "agent zero"  
-      },
-      "ccnotify": {
-        "pronunciation": "CC notify"
-      }
+  "project_names": {
+    "agent-zero": "agent zero",
+    "ccnotify": "CC notify",
+    "roo-code": "roo code"
+  },
+  "commands": {
+    "ls": "list",
+    "cd": "change directory",
+    "rm": "remove"
+  },
+  "patterns": [
+    {
+      "pattern": "npm run (\\w+)",
+      "replacement": "npm run {1}"
     }
-  }
+  ]
 }
 ```
 
