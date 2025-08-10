@@ -918,9 +918,10 @@ class NotificationHandler:
                 f"PostToolUse response for {tool_name}: {json.dumps(tool_response, indent=2) if isinstance(tool_response, dict) else tool_response}"
             )
 
-            # Check if response indicates an error (type: "error" or has error field)
+            # Check if response indicates an error (type: "error" or has non-empty error field)
             if isinstance(tool_response, dict) and (
-                tool_response.get("type") == "error" or "error" in tool_response
+                tool_response.get("type") == "error"
+                or (tool_response.get("error") and tool_response.get("error") != "")
             ):
                 event_type = "error"
                 error_msg = tool_response.get(
@@ -948,27 +949,51 @@ class NotificationHandler:
             notif_type = hook_data.get("notification_type", "")
             raw_message = hook_data.get("message", "")
 
+            # Debug log to understand what triggers notifications
+            logger.debug(
+                f"Notification received - type: {notif_type}, message: {raw_message[:200] if raw_message else 'None'}"
+            )
+
             if "error" in notif_type.lower():
                 event_type = "error"
                 message = hook_data.get("message", "An error occurred")
-            else:
-                # This is likely a permission/confirmation request
-                event_type = "input_needed"
+            elif raw_message:  # Only process if there's actually a message
+                # Check if this is truly a permission/confirmation request
+                permission_keywords = [
+                    "permission to use",
+                    "permission needed",
+                    "needs your permission",
+                    "confirm",
+                    "approve",
+                    "allow",
+                ]
 
-                # Extract what Claude needs permission for
-                if "permission to use" in raw_message:
-                    # Extract tool name from "Claude needs your permission to use [Tool]"
-                    tool_match = re.search(r"permission to use (\w+)", raw_message)
-                    if tool_match:
-                        tool_requested = tool_match.group(1)
-                        message = f"[{display_project_name}] Permission needed for {tool_requested}"
-                        custom_tts = f"{tts_project_name}, needs permission for {tool_requested}"
+                if any(keyword in raw_message.lower() for keyword in permission_keywords):
+                    event_type = "input_needed"
+                    # Extract what Claude needs permission for
+                    if "permission to use" in raw_message:
+                        # Extract tool name from "Claude needs your permission to use [Tool]"
+                        tool_match = re.search(r"permission to use (\w+)", raw_message)
+                        if tool_match:
+                            tool_requested = tool_match.group(1)
+                            message = (
+                                f"[{display_project_name}] Permission needed for {tool_requested}"
+                            )
+                            custom_tts = (
+                                f"{tts_project_name}, needs permission for {tool_requested}"
+                            )
+                        else:
+                            message = f"[{display_project_name}] {raw_message}"
+                            custom_tts = f"{tts_project_name}, {raw_message}"
                     else:
-                        message = f"[{display_project_name}] {raw_message}"
-                        custom_tts = f"{tts_project_name}, {raw_message}"
+                        message = f"[{display_project_name}] Input needed"
+                        custom_tts = f"{tts_project_name}, input needed"
                 else:
-                    message = f"[{display_project_name}] Input needed"
-                    custom_tts = f"{tts_project_name}, input needed"
+                    # Not a permission request - log it but don't notify
+                    logger.debug(
+                        f"Notification ignored (not a permission request): {raw_message[:100]}"
+                    )
+                    return  # Skip notification
 
         # Send notification if we have an event
         if event_type and message:
