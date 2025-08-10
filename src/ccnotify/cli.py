@@ -29,68 +29,54 @@ Examples:
   uvx ccnotify install --force      # Force complete reinstallation  
   uvx ccnotify install --config-only # Only update configuration
   uvx ccnotify install --quiet      # Minimal output mode
-        """
+        """,
     )
-    
+
     # Simplified argument structure
     parser.add_argument(
-        "command", 
-        nargs='?', 
+        "command",
+        nargs="?",
         default="install",
         choices=["install"],
-        help="Command to execute (default: install)"
+        help="Command to execute (default: install)",
     )
-    
+
+    parser.add_argument("--force", action="store_true", help="Force complete reinstallation")
+
     parser.add_argument(
-        "--force", 
-        action="store_true", 
-        help="Force complete reinstallation"
+        "--config-only", action="store_true", help="Only update configuration, skip script updates"
     )
-    
+
+    parser.add_argument("--quiet", action="store_true", help="Minimal output mode")
+
     parser.add_argument(
-        "--config-only", 
-        action="store_true", 
-        help="Only update configuration, skip script updates"
+        "--logging", action="store_true", help="Enable logging to file (off by default)"
     )
-    
-    parser.add_argument(
-        "--quiet", 
-        action="store_true", 
-        help="Minimal output mode"
-    )
-    
-    parser.add_argument(
-        "--logging",
-        action="store_true",
-        help="Enable logging to file (off by default)"
-    )
-    
-    parser.add_argument(
-        "--version", 
-        action="version", 
-        version=f"CCNotify {get_package_version()}"
-    )
-    
+
+    parser.add_argument("--version", action="version", version=f"CCNotify {get_package_version()}")
+
     args = parser.parse_args()
-    
+
     # Always execute install command with intelligent detection
     success = execute_install_command(args.force, args.config_only, args.quiet, args.logging)
-    
+
     if not success:
         sys.exit(1)
 
 
-def execute_install_command(force: bool = False, config_only: bool = False, quiet: bool = False, logging: bool = False) -> bool:
+def execute_install_command(
+    force: bool = False, config_only: bool = False, quiet: bool = False, logging: bool = False
+) -> bool:
     """Execute the intelligent install command with detection logic."""
     # Validate parameters
     if not isinstance(logging, bool):
         raise TypeError("logging parameter must be a boolean")
-    
+
     try:
         # Detect existing installation
         detector = InstallationDetector()
         status = detector.check_existing_installation()
-        
+
         if status.exists and not force:
             # Existing installation - run update flow
             update_flow = UpdateFlow()
@@ -99,7 +85,7 @@ def execute_install_command(force: bool = False, config_only: bool = False, quie
             # No installation or force requested - run first-time flow
             first_time_flow = FirstTimeFlow()
             return first_time_flow.run(force=force, quiet=quiet, logging=logging)
-            
+
     except KeyboardInterrupt:
         if not quiet:
             display_error_message("Installation cancelled by user")
@@ -116,17 +102,19 @@ def get_notify_template() -> str:
     from .notify import main as notify_main
     from .version import get_package_version
     import inspect
-    
+
     # Get the complete notify.py file content
     from pathlib import Path
+
     notify_file = Path(__file__).parent / "notify.py"
-    
+
     if notify_file.exists():
         content = notify_file.read_text()
         # Embed version in the generated script
         from .version import embed_version_in_script
+
         return embed_version_in_script(content, get_package_version())
-    
+
     # Fallback minimal template
     version = get_package_version()
     return f'''#!/usr/bin/env python3
@@ -188,60 +176,57 @@ def update_claude_settings(script_path: str, logging: bool = False) -> bool:
     import json
     import shutil
     from pathlib import Path
-    
+
     claude_dir = Path.home() / ".claude"
     settings_file = claude_dir / "settings.json"
-    
+
     try:
         if settings_file.exists():
             # Create backup first
-            backup_file = settings_file.with_suffix('.json.ccnotify.bak')
+            backup_file = settings_file.with_suffix(".json.ccnotify.bak")
             shutil.copy2(settings_file, backup_file)
-            
-            with open(settings_file, 'r') as f:
+
+            with open(settings_file, "r") as f:
                 settings = json.load(f)
         else:
             settings = {}
-        
+
         # Add our hook configuration
         if "hooks" not in settings:
             settings["hooks"] = {}
-        
+
         # Configure ccnotify hook for relevant events
         # Add --logging flag to command if logging is enabled
         command = f"uv run {script_path}"
         if logging:
             command += " --logging"
-        
-        hook_config = {
-            "type": "command",
-            "command": command
-        }
-        
+
+        hook_config = {"type": "command", "command": command}
+
         events_to_hook = ["PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"]
         hooks_added = False
-        
+
         for event in events_to_hook:
             if event not in settings["hooks"]:
                 settings["hooks"][event] = []
-            
+
             # Check if our hook is already configured and update if needed
             # Hook structure: {"matcher": ".*", "hooks": [{"type": "command", "command": "..."}]}
             hook_updated = False
             hook_exists = False
-            
+
             for i, entry in enumerate(settings["hooks"][event]):
                 if not isinstance(entry, dict):
                     continue
-                    
+
                 hooks_list = entry.get("hooks", [])
                 if not isinstance(hooks_list, list):
                     continue
-                    
+
                 for j, hook in enumerate(hooks_list):
                     if not isinstance(hook, dict):
                         continue
-                        
+
                     existing_command = hook.get("command", "")
                     # Check if this is our ccnotify hook
                     if "ccnotify.py" in existing_command or str(script_path) in existing_command:
@@ -254,30 +239,30 @@ def update_claude_settings(script_path: str, logging: bool = False) -> bool:
                                 hooks_added = True
                             except (KeyError, IndexError) as e:
                                 # Log error but continue processing
-                                print(f"Warning: Could not update hook for {event}: {e}", file=sys.stderr)
+                                print(
+                                    f"Warning: Could not update hook for {event}: {e}",
+                                    file=sys.stderr,
+                                )
                         break
-                
+
                 if hook_exists:
                     break
-            
+
             if not hook_exists:
-                settings["hooks"][event].append({
-                    "matcher": ".*",
-                    "hooks": [hook_config]
-                })
+                settings["hooks"][event].append({"matcher": ".*", "hooks": [hook_config]})
                 hooks_added = True
-        
+
         # Enable hooks if not already enabled
         if not settings.get("hooksEnabled", False):
             settings["hooksEnabled"] = True
             hooks_added = True
-        
+
         if hooks_added:
-            with open(settings_file, 'w') as f:
+            with open(settings_file, "w") as f:
                 json.dump(settings, f, indent=2)
-        
+
         return True
-        
+
     except Exception:
         return False
 

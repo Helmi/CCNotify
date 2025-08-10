@@ -113,24 +113,44 @@ Customize how project names and commands are pronounced by editing `~/.claude/cc
 
 ```json
 {
-  "project_names": {
-    "agent-zero": "agent zero",
-    "ccnotify": "CC notify",
-    "roo-code": "roo code"
+  "projects": {
+    "ccnotify": {
+      "folder": "-Users-helmi-code-ccnotify",
+      "display_name": "CCNotify",
+      "pronunciation": "CC notify"
+    },
+    "agent-zero": {
+      "folder": "-Users-helmi-code-agent-zero",
+      "display_name": "Agent Zero",
+      "pronunciation": "agent zero"
+    }
   },
   "commands": {
     "ls": "list",
     "cd": "change directory",
-    "rm": "remove"
+    "rm": "remove",
+    "mkdir": "make directory",
+    "npm": "N P M",
+    "uvx": "U V X"
   },
   "patterns": [
     {
       "pattern": "npm run (\\w+)",
-      "replacement": "npm run {1}"
+      "replacement": "N P M run {1}"
+    },
+    {
+      "pattern": "git (push|pull|commit)",
+      "replacement": "git {1}"
+    },
+    {
+      "pattern": "(.+)\\.py",
+      "replacement": "{1} python file"
     }
   ]
 }
 ```
+
+**Note:** Existing configurations will be automatically migrated to the new format on first load.
 
 ## Requirements
 
