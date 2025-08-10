@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2025-08-04
+
+### 🐛 Fixed
+- **Improved pronunciation for TTS**: Now uses values from replacements.json for better TTS output
+- **Cleaner sound file names**: Removed TTS provider prefix from cached sound files
+- **Better curl/wget handling**: Improved notification handling for download commands
+
+## [0.1.11] - 2025-08-04
+
+### 🐛 Fixed
+- **Cleaner notifications**: Prevented code snippets from appearing in notification messages
+
+## [0.1.10] - 2025-08-04
+
+### ✨ Added
+- **Embedded Kokoro TTS**: Kokoro TTS now embedded directly in notify.py for standalone execution
+
+## [0.1.9] - 2025-08-03
+
+### ✨ Added
+- **Enhanced Kokoro configuration**: Improved voice configuration and project detection
+
+### 🐛 Fixed
+- **Project detection fallback**: Fixed detection when Claude doesn't send sessionId
+
+## [0.1.8] - 2025-08-03
+
+### 🐛 Fixed
+- **Test installer error**: Fixed script_exists attribute error in test_installer.py
+
+## [0.1.7] - 2025-08-03
+
+### ✨ Added
+- **Duplicate hooks fix script**: Added utility script to fix duplicate hooks for affected users
+- **Comprehensive testing infrastructure**: Added local testing capabilities
+
+### 🐛 Fixed
+- **Critical hook duplication bug**: Fixed issues with duplicate hook detection and prevention
+
+## [0.1.6] - 2025-08-03
+
+### 🐛 Fixed
+- **Update flow improvements**: Fixed version management and update flow issues
+- **Update fixes current version**: Update flow now fixes issues even when version is current
+
 ## [0.1.5] - 2025-08-03
 
 ### 🐛 Fixed
