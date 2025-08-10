@@ -6,10 +6,10 @@ from .flows import FirstTimeFlow, UpdateFlow
 
 __all__ = [
     "InstallationDetector",
-    "InstallationStatus", 
+    "InstallationStatus",
     "display_welcome_screen",
     "display_success_message",
     "display_error_message",
     "FirstTimeFlow",
-    "UpdateFlow"
+    "UpdateFlow",
 ]
