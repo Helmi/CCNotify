@@ -82,6 +82,10 @@ Examples:
 
 def execute_install_command(force: bool = False, config_only: bool = False, quiet: bool = False, logging: bool = False) -> bool:
     """Execute the intelligent install command with detection logic."""
+    # Validate parameters
+    if not isinstance(logging, bool):
+        raise TypeError("logging parameter must be a boolean")
+    
     try:
         # Detect existing installation
         detector = InstallationDetector()
@@ -227,18 +231,32 @@ def update_claude_settings(script_path: str, logging: bool = False) -> bool:
             hook_exists = False
             
             for i, entry in enumerate(settings["hooks"][event]):
-                if isinstance(entry, dict) and "hooks" in entry:
-                    for j, hook in enumerate(entry.get("hooks", [])):
-                        if isinstance(hook, dict):
-                            existing_command = hook.get("command", "")
-                            if "ccnotify.py" in existing_command or existing_command.endswith(str(script_path)):
-                                hook_exists = True
-                                # Update the command if it's different (e.g., logging flag changed)
-                                if existing_command != command:
-                                    settings["hooks"][event][i]["hooks"][j]["command"] = command
-                                    hook_updated = True
-                                    hooks_added = True
-                                break
+                if not isinstance(entry, dict):
+                    continue
+                    
+                hooks_list = entry.get("hooks", [])
+                if not isinstance(hooks_list, list):
+                    continue
+                    
+                for j, hook in enumerate(hooks_list):
+                    if not isinstance(hook, dict):
+                        continue
+                        
+                    existing_command = hook.get("command", "")
+                    # Check if this is our ccnotify hook
+                    if "ccnotify.py" in existing_command or str(script_path) in existing_command:
+                        hook_exists = True
+                        # Update the command if it's different (e.g., logging flag changed)
+                        if existing_command != command:
+                            try:
+                                settings["hooks"][event][i]["hooks"][j]["command"] = command
+                                hook_updated = True
+                                hooks_added = True
+                            except (KeyError, IndexError) as e:
+                                # Log error but continue processing
+                                print(f"Warning: Could not update hook for {event}: {e}", file=sys.stderr)
+                        break
+                
                 if hook_exists:
                     break
             

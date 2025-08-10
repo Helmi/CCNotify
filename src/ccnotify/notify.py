@@ -186,21 +186,40 @@ def setup_logging(enable_logging=None):
         enable_logging = USE_LOGGING
     
     if enable_logging:
-        # Create logs directory only if logging is enabled
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        
-        log_file = LOGS_DIR / f"notifications_{datetime.datetime.now().strftime('%Y%m%d')}.log"
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stderr)
-            ],
-            force=True  # Force reconfiguration
-        )
-        logger = logging.getLogger(__name__)
-        logger.info("Logging enabled")
+        try:
+            # Create logs directory only if logging is enabled
+            LOGS_DIR.mkdir(parents=True, exist_ok=True)
+            
+            log_file = LOGS_DIR / f"notifications_{datetime.datetime.now().strftime('%Y%m%d')}.log"
+            
+            # Check log file size and rotate if needed (max 10MB)
+            max_size = 10 * 1024 * 1024  # 10MB
+            if log_file.exists() and log_file.stat().st_size > max_size:
+                # Rotate the log file
+                backup_file = log_file.with_suffix(f'.{datetime.datetime.now().strftime("%H%M%S")}.log')
+                log_file.rename(backup_file)
+                
+                # Clean up old log files (keep last 5)
+                log_files = sorted(LOGS_DIR.glob("notifications_*.log"), key=lambda f: f.stat().st_mtime)
+                if len(log_files) > 5:
+                    for old_file in log_files[:-5]:
+                        old_file.unlink()
+            
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler(log_file),
+                    logging.StreamHandler(sys.stderr)
+                ],
+                force=True  # Force reconfiguration
+            )
+            logger = logging.getLogger(__name__)
+            logger.info("Logging enabled")
+        except (OSError, PermissionError) as e:
+            # Fall back to no-op logger if we can't create log directory
+            logger = NoOpLogger()
+            print(f"Warning: Could not enable logging: {e}", file=sys.stderr)
     else:
         # Keep the no-op logger
         logger = NoOpLogger()
