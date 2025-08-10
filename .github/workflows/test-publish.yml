@@ -7,12 +7,6 @@ on:
         description: 'Version to test (optional - uses current version if empty)'
         required: false
         type: string
-  push:
-    branches: [ main ]
-    paths:
-      - 'pyproject.toml'
-      - 'src/ccnotify/**'
-      - '.github/workflows/test-publish.yml'
 
 permissions:
   contents: read
