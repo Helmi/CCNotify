@@ -7,19 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2025-08-10
+
 ### Fixed
 - NotebookEdit operations no longer trigger false error notifications
 - Input needed alerts only appear for actual permission requests
 - Empty error fields in tool responses are now properly ignored
+- Platform compatibility prompts now respect quiet mode
 
 ### Added
+- Optional logging with `--logging` flag during installation
 - Debug logging for notification triggers to help troubleshooting
 - Keyword filtering for permission-related notifications
-- Comprehensive release workflow documentation
 
 ### Changed
 - Error detection logic now checks for non-empty error values
 - Notification filtering improved to reduce false positives
+- Refactored replacements.json structure to eliminate duplication
+- Updated default Kokoro voice to af_heart
 
 ## [0.1.12] - 2025-08-04
 
