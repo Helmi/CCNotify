@@ -102,8 +102,9 @@ class FirstTimeFlow(BaseFlow):
                 display_progress_header("Platform Compatibility Check", 1, 5)
                 animate_thinking("Checking platform compatibility")
             
-            if not self._check_platform_compatibility():
-                display_error_message("Platform not supported")
+            if not self._check_platform_compatibility(quiet):
+                if not quiet:
+                    display_error_message("Platform not supported")
                 return False
             
             # Step 2: Migration check
@@ -157,15 +158,19 @@ class FirstTimeFlow(BaseFlow):
                 display_error_message("Installation failed", str(e))
             return False
     
-    def _check_platform_compatibility(self) -> bool:
+    def _check_platform_compatibility(self, quiet: bool = False) -> bool:
         """Check if current platform is supported."""
         platform_info = self.detector.get_platform_info()
         
         # Currently only macOS is fully supported
         if platform_info["system"] != "Darwin":
-            console.print("[yellow]Warning: Full functionality only tested on macOS[/yellow]")
-            if not Confirm.ask("Continue anyway?"):
-                return False
+            if quiet:
+                # In quiet mode, just proceed with installation on non-macOS systems
+                return True
+            else:
+                console.print("[yellow]Warning: Full functionality only tested on macOS[/yellow]")
+                if not Confirm.ask("Continue anyway?"):
+                    return False
         
         return True
     
