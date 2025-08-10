@@ -35,6 +35,8 @@ That's it! The installer will:
 
 Restart Claude Code to enable notifications.
 
+**Troubleshooting:** Use `uvx ccnotify install --force` to completely reinstall if you encounter issues.
+
 ## Support the work
 
 If you want to support the project or me in Person, feel free to become a Github Sponsor.
@@ -49,24 +51,6 @@ If you use Elevenlabs as a TTS provider, [use my Affiliate link to signup](https
 - **Zero Config**: Works out of the box with sensible defaults
 - **Privacy First**: Local processing with optional cloud TTS
 
-## Commands
-
-```bash
-# Single intelligent install command - handles everything automatically
-uvx ccnotify install                     # Install or update CCNotify intelligently
-uvx ccnotify install --force             # Force complete reinstallation
-uvx ccnotify install --config-only       # Only update configuration
-uvx ccnotify install --quiet             # Minimal output mode
-```
-
-The new installer automatically detects:
-
-- Whether CCNotify is already installed (runs update flow)
-- What TTS provider you prefer
-- Whether models need downloading
-- Configuration migration needs
-
-**That's it!** No more complex subcommands - just one command that does the right thing.
 
 ## Configuration
 
@@ -76,12 +60,12 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 
 ```json
 {
-  "tts": { "provider": "kokoro", "enabled": true },
-  "kokoro": {
-    "voice": "af_sarah",
-    "speed": 1.0,
-    "models_dir": "models"
-  }
+  "tts_provider": "kokoro",
+  "voice": "af_sarah",
+  "speed": 1.0,
+  "format": "mp3",
+  "mp3_bitrate": "128k",
+  "models_dir": "~/.claude/ccnotify/models"
 }
 ```
 
@@ -89,12 +73,10 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 
 ```json
 {
-  "tts": { "provider": "elevenlabs", "enabled": true },
-  "elevenlabs": {
-    "api_key": "your_api_key_here",
-    "voice_id": "21m00Tcm4TlvDq8ikWAM",
-    "model_id": "eleven_flash_v2_5"
-  }
+  "tts_provider": "elevenlabs",
+  "api_key": "your_api_key_here",
+  "voice_id": "21m00Tcm4TlvDq8ikWAM",
+  "model_id": "eleven_flash_v2_5"
 }
 ```
 
@@ -103,17 +85,36 @@ The installer creates a configuration file at `~/.claude/ccnotify/config.json`. 
 - **Kokoro**: `af_sarah`, `am_adam`, `bf_alice`, `bm_daniel` and [40+ others](https://github.com/thewh1teagle/kokoro-onnx)
 - **ElevenLabs**: Use voice IDs from your [ElevenLabs account](https://try.elevenlabs.io/ist8m7h95ed2)
 
+**Pronunciation Customization:**
+
+Customize how project names are pronounced by editing `~/.claude/ccnotify/replacements.json`. CCNotify automatically discovers your projects and you can adjust their pronunciation:
+
+```json
+{
+  "_auto_discovered": {
+    "projects": {
+      "agent-zero": {
+        "pronunciation": "agent zero"  
+      },
+      "ccnotify": {
+        "pronunciation": "CC notify"
+      }
+    }
+  }
+}
+```
+
 ## Requirements
 
 - macOS or Linux
-- Python 3.9+
+- Python 3.10+
 - Claude Code CLI
 - **For Kokoro**: ~350MB disk space for local models
 - **For ElevenLabs**: API account and internet connection
 
 ## Early Version Notice
 
-This is v0.1.0 - an early release focused on core functionality. Features may change based on feedback.
+This is v0.1.12 - an early release focused on core functionality. Features may change based on feedback.
 
 **Issues & Suggestions**: Please use [GitHub Issues](https://github.com/Helmi/ccnotify/issues) to report problems or suggest improvements.
 
