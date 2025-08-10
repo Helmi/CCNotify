@@ -1,6 +1,6 @@
 # CCNotify
 
-[![Latest Release](https://img.shields.io/github/v/release/Helmi/ccnotify)](https://github.com/Helmi/ccnotify/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/Helmi/CCNotify)](https://github.com/Helmi/CCNotify/releases/latest)
 [![PyPI](https://img.shields.io/pypi/v/ccnotify)](https://pypi.org/project/ccnotify/)
 
 ## Voice Notification System for Claude Code
@@ -164,7 +164,7 @@ Customize how project names and commands are pronounced by editing `~/.claude/cc
 
 This is an early release focused on core functionality. Features may change based on feedback.
 
-**Issues & Suggestions**: Please use [GitHub Issues](https://github.com/Helmi/ccnotify/issues) to report problems or suggest improvements.
+**Issues & Suggestions**: Please use [GitHub Issues](https://github.com/Helmi/CCNotify/issues) to report problems or suggest improvements.
 
 ## How It Works
 

@@ -57,10 +57,10 @@ full = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Helmi/ccnotify"
-Repository = "https://github.com/Helmi/ccnotify"
-Issues = "https://github.com/Helmi/ccnotify/issues"
-Documentation = "https://github.com/Helmi/ccnotify#readme"
+Homepage = "https://github.com/Helmi/CCNotify"
+Repository = "https://github.com/Helmi/CCNotify"
+Issues = "https://github.com/Helmi/CCNotify/issues"
+Documentation = "https://github.com/Helmi/CCNotify#readme"
 
 [project.scripts]
 ccnotify = "ccnotify.cli:main"
