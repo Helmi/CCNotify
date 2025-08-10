@@ -177,26 +177,49 @@ logger = NoOpLogger()
 CACHE_EXPIRY_DAYS = 7  # Keep cache entries for 7 days
 
 
-def setup_logging():
-    """Setup logging based on USE_LOGGING environment variable"""
+def setup_logging(enable_logging=None):
+    """Setup logging based on --logging flag or USE_LOGGING environment variable"""
     global logger
     
-    if USE_LOGGING:
-        # Create logs directory only if logging is enabled
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        
-        log_file = LOGS_DIR / f"notifications_{datetime.datetime.now().strftime('%Y%m%d')}.log"
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stderr)
-            ],
-            force=True  # Force reconfiguration
-        )
-        logger = logging.getLogger(__name__)
-        logger.info("Logging enabled")
+    # Command-line flag takes precedence over environment variable
+    if enable_logging is None:
+        enable_logging = USE_LOGGING
+    
+    if enable_logging:
+        try:
+            # Create logs directory only if logging is enabled
+            LOGS_DIR.mkdir(parents=True, exist_ok=True)
+            
+            log_file = LOGS_DIR / f"notifications_{datetime.datetime.now().strftime('%Y%m%d')}.log"
+            
+            # Check log file size and rotate if needed (max 10MB)
+            max_size = 10 * 1024 * 1024  # 10MB
+            if log_file.exists() and log_file.stat().st_size > max_size:
+                # Rotate the log file
+                backup_file = log_file.with_suffix(f'.{datetime.datetime.now().strftime("%H%M%S")}.log')
+                log_file.rename(backup_file)
+                
+                # Clean up old log files (keep last 5)
+                log_files = sorted(LOGS_DIR.glob("notifications_*.log"), key=lambda f: f.stat().st_mtime)
+                if len(log_files) > 5:
+                    for old_file in log_files[:-5]:
+                        old_file.unlink()
+            
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler(log_file),
+                    logging.StreamHandler(sys.stderr)
+                ],
+                force=True  # Force reconfiguration
+            )
+            logger = logging.getLogger(__name__)
+            logger.info("Logging enabled")
+        except (OSError, PermissionError) as e:
+            # Fall back to no-op logger if we can't create log directory
+            logger = NoOpLogger()
+            print(f"Warning: Could not enable logging: {e}", file=sys.stderr)
     else:
         # Keep the no-op logger
         logger = NoOpLogger()
@@ -829,6 +852,12 @@ class NotificationHandler:
 
 def main():
     """Main notification handler entry point"""
+    # Parse command-line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description="CCNotify notification handler")
+    parser.add_argument("--logging", action="store_true", help="Enable logging to file")
+    args, unknown = parser.parse_known_args()
+    
     # Load .env file if available
     try:
         env_file = BASE_DIR / ".env"
@@ -848,17 +877,17 @@ def main():
     except ImportError:
         pass
     
-    # Setup logging based on environment variable
-    setup_logging()
+    # Setup logging based on command-line flag or environment variable
+    setup_logging(enable_logging=args.logging)
     
     handler = NotificationHandler()
     
     # Check if running interactively (for testing)
     if sys.stdin.isatty():
         # Test mode
-        if len(sys.argv) > 1:
-            event_type = sys.argv[1]
-            message = sys.argv[2] if len(sys.argv) > 2 else "Test notification"
+        if len(unknown) > 0:
+            event_type = unknown[0]
+            message = unknown[1] if len(unknown) > 1 else "Test notification"
             logger.info(f"Test mode: event_type={event_type}, message={message}")
             handler.notify("Claude Code", message, event_type)
             sound = handler.get_notification_sound(event_type)
