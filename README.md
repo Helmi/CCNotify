@@ -37,6 +37,23 @@ Restart Claude Code to enable notifications.
 
 **Troubleshooting:** Use `uvx ccnotify install --force` to completely reinstall if you encounter issues.
 
+### Logging
+
+By default, CCNotify runs without logging to prevent log files from growing too large. If you need to debug issues or track activity, you can enable logging:
+
+```bash
+# Install with logging enabled
+uvx ccnotify install --logging
+
+# Update existing installation to enable logging
+uvx ccnotify install --logging
+
+# Update existing installation to disable logging (default)
+uvx ccnotify install
+```
+
+When logging is enabled, log files will be created in `~/.claude/ccnotify/logs/` with daily rotation.
+
 ## Support the work
 
 If you want to support the project or me in Person, feel free to become a Github Sponsor.

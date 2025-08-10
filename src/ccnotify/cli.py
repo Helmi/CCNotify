@@ -60,6 +60,12 @@ Examples:
     )
     
     parser.add_argument(
+        "--logging",
+        action="store_true",
+        help="Enable logging to file (off by default)"
+    )
+    
+    parser.add_argument(
         "--version", 
         action="version", 
         version=f"CCNotify {get_package_version()}"
@@ -68,13 +74,13 @@ Examples:
     args = parser.parse_args()
     
     # Always execute install command with intelligent detection
-    success = execute_install_command(args.force, args.config_only, args.quiet)
+    success = execute_install_command(args.force, args.config_only, args.quiet, args.logging)
     
     if not success:
         sys.exit(1)
 
 
-def execute_install_command(force: bool = False, config_only: bool = False, quiet: bool = False) -> bool:
+def execute_install_command(force: bool = False, config_only: bool = False, quiet: bool = False, logging: bool = False) -> bool:
     """Execute the intelligent install command with detection logic."""
     try:
         # Detect existing installation
@@ -84,11 +90,11 @@ def execute_install_command(force: bool = False, config_only: bool = False, quie
         if status.exists and not force:
             # Existing installation - run update flow
             update_flow = UpdateFlow()
-            return update_flow.run(config_only=config_only, quiet=quiet)
+            return update_flow.run(config_only=config_only, quiet=quiet, logging=logging)
         else:
             # No installation or force requested - run first-time flow
             first_time_flow = FirstTimeFlow()
-            return first_time_flow.run(force=force, quiet=quiet)
+            return first_time_flow.run(force=force, quiet=quiet, logging=logging)
             
     except KeyboardInterrupt:
         if not quiet:
@@ -173,7 +179,7 @@ if __name__ == "__main__":
 '''
 
 
-def update_claude_settings(script_path: str) -> bool:
+def update_claude_settings(script_path: str, logging: bool = False) -> bool:
     """Update Claude settings.json to configure ccnotify hooks."""
     import json
     import shutil
@@ -198,9 +204,14 @@ def update_claude_settings(script_path: str) -> bool:
             settings["hooks"] = {}
         
         # Configure ccnotify hook for relevant events
+        # Add --logging flag to command if logging is enabled
+        command = f"uv run {script_path}"
+        if logging:
+            command += " --logging"
+        
         hook_config = {
             "type": "command",
-            "command": f"uv run {script_path}"
+            "command": command
         }
         
         events_to_hook = ["PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"]
@@ -210,16 +221,23 @@ def update_claude_settings(script_path: str) -> bool:
             if event not in settings["hooks"]:
                 settings["hooks"][event] = []
             
-            # Check if our hook is already configured
+            # Check if our hook is already configured and update if needed
             # Hook structure: {"matcher": ".*", "hooks": [{"type": "command", "command": "..."}]}
+            hook_updated = False
             hook_exists = False
-            for entry in settings["hooks"][event]:
+            
+            for i, entry in enumerate(settings["hooks"][event]):
                 if isinstance(entry, dict) and "hooks" in entry:
-                    for hook in entry.get("hooks", []):
+                    for j, hook in enumerate(entry.get("hooks", [])):
                         if isinstance(hook, dict):
-                            command = hook.get("command", "")
-                            if "ccnotify.py" in command or command.endswith(str(script_path)):
+                            existing_command = hook.get("command", "")
+                            if "ccnotify.py" in existing_command or existing_command.endswith(str(script_path)):
                                 hook_exists = True
+                                # Update the command if it's different (e.g., logging flag changed)
+                                if existing_command != command:
+                                    settings["hooks"][event][i]["hooks"][j]["command"] = command
+                                    hook_updated = True
+                                    hooks_added = True
                                 break
                 if hook_exists:
                     break
