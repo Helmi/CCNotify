@@ -487,6 +487,8 @@ def migrate_replacements_format(old_data: Dict[str, Any]) -> Dict[str, Any]:
             "mkdir": "make directory",
             "npm": "N P M",
             "uvx": "U V X",
+            "gh": "github CLI",
+            "uv": "U V",
         }
 
     # Add default patterns if empty
@@ -537,6 +539,8 @@ def load_replacements() -> Dict[str, Any]:
             "mkdir": "make directory",
             "npm": "N P M",
             "uvx": "U V X",
+            "gh": "github CLI",
+            "uv": "U V",
         },
         "patterns": [
             {"pattern": "npm run (\\w+)", "replacement": "N P M run {1}"},
@@ -591,12 +595,25 @@ def apply_command_replacement(command: str, replacements: Dict[str, Any]) -> str
     # Then check direct command replacements
     cmd_parts = command.split()
     if cmd_parts:
-        base_cmd = cmd_parts[0]
-        if base_cmd in cmd_replacements:
-            return cmd_replacements[base_cmd]
+        # Check if first word is "running" and handle it specially
+        if len(cmd_parts) > 1 and cmd_parts[0] == "running":
+            base_cmd = cmd_parts[1]
+            if base_cmd in cmd_replacements:
+                # Replace the command after "running"
+                parts = cmd_parts.copy()
+                parts[1] = cmd_replacements[base_cmd]
+                return " ".join(parts)
+        else:
+            # Check first word directly
+            base_cmd = cmd_parts[0]
+            if base_cmd in cmd_replacements:
+                # Replace just the command part, preserve the rest
+                parts = cmd_parts.copy()
+                parts[0] = cmd_replacements[base_cmd]
+                return " ".join(parts)
 
     # Return the original command if no replacement found
-    return f"running {cmd_parts[0]}" if cmd_parts else "running command"
+    return command
 
 
 class NotificationHandler:
@@ -874,6 +891,9 @@ class NotificationHandler:
                         audio_desc = tts_descriptions[cmd_summary]
                     else:
                         audio_desc = f"running {cmd_summary}"
+
+                    # Apply command replacements for TTS
+                    audio_desc = apply_command_replacement(audio_desc, replacements)
 
                     # Build messages
                     if target and len(target) < 50:  # Sanity check on target length
