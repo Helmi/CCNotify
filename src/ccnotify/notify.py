@@ -299,6 +299,63 @@ def is_cwd_under_project(cwd: str, project_path: str) -> bool:
         return False
 
 
+def is_command_targeting_outside_project(command: str, cwd: str) -> tuple[bool, Optional[str]]:
+    """
+    Check if command targets files outside the current project directory
+    Returns (is_outside, target_path) where target_path is the external file if found
+    """
+    if not cwd:
+        return False, None
+
+    try:
+        cwd_path = Path(cwd).resolve()
+
+        # Split command to find file arguments
+        cmd_parts = command.split()
+        if not cmd_parts:
+            return False, None
+
+        # Skip the command itself and any flags
+        for part in cmd_parts[1:]:
+            # Skip flags and options
+            if part.startswith("-"):
+                continue
+
+            # Skip URLs and pipes/redirects
+            if any(x in part for x in ["http://", "https://", "|", ">", "<", ";"]):
+                continue
+
+            # Check if this looks like a file path
+            if "/" in part or part.startswith("."):
+                try:
+                    target_path = Path(part).resolve()
+
+                    # Check if target is outside current project
+                    if not (cwd_path in target_path.parents or target_path == cwd_path):
+                        # Special cases for system directories
+                        target_str = str(target_path)
+                        if any(
+                            target_str.startswith(prefix)
+                            for prefix in ["/etc/", "/usr/", "/var/", "/opt/", "/System/"]
+                        ):
+                            return True, target_str
+                        # Check if it's in a different project/code directory
+                        elif any(
+                            parent.name in ["code", "projects", "dev", "work"]
+                            for parent in target_path.parents
+                        ):
+                            return True, target_str
+
+                except (OSError, ValueError):
+                    # If path resolution fails, assume it's safe
+                    continue
+
+        return False, None
+
+    except Exception:
+        return False, None
+
+
 def auto_add_project_to_replacements(project_name: str, folder_name: str = None):
     """Automatically add project to replacements.json if not present"""
     try:
@@ -593,26 +650,13 @@ def apply_command_replacement(command: str, replacements: Dict[str, Any]) -> str
                 return result
 
     # Then check direct command replacements
-    cmd_parts = command.split()
-    if cmd_parts:
-        # Check if first word is "running" and handle it specially
-        if len(cmd_parts) > 1 and cmd_parts[0] == "running":
-            base_cmd = cmd_parts[1]
-            if base_cmd in cmd_replacements:
-                # Replace the command after "running"
-                parts = cmd_parts.copy()
-                parts[1] = cmd_replacements[base_cmd]
-                return " ".join(parts)
-        else:
-            # Check first word directly
-            base_cmd = cmd_parts[0]
-            if base_cmd in cmd_replacements:
-                # Replace just the command part, preserve the rest
-                parts = cmd_parts.copy()
-                parts[0] = cmd_replacements[base_cmd]
-                return " ".join(parts)
+    # Apply replacements to each word in the command using word boundaries
+    for cmd_name, replacement_text in cmd_replacements.items():
+        # Use word boundaries to match whole words only
+        pattern = r"\b" + re.escape(cmd_name) + r"\b"
+        command = re.sub(pattern, replacement_text, command, flags=re.IGNORECASE)
 
-    # Return the original command if no replacement found
+    # Return the modified command
     return command
 
 
@@ -781,7 +825,7 @@ class NotificationHandler:
                 command = hook_data.get("parameters", hook_data.get("tool_input", {})).get(
                     "command", ""
                 )
-                # Skip common safe commands
+                # Skip common safe commands (expanded list)
                 safe_prefixes = [
                     "echo",
                     "pwd",
@@ -792,23 +836,43 @@ class NotificationHandler:
                     "grep",
                     "find",
                     "which",
+                    "git status",
+                    "git log",
+                    "git diff",
+                    "git show",
+                    "git branch",
+                    "cp",  # Moved from dangerous - too common
+                    "curl",  # Moved from dangerous - too common
+                    "wget",  # Moved from dangerous - too common
+                    "npm install",
+                    "npm run",
+                    "uvx",
+                    "python",
+                    "node",
+                    "pip",
+                    "yarn",
                 ]
                 if any(command.strip().startswith(prefix) for prefix in safe_prefixes):
                     return  # Skip notification
 
-                # Only notify for potentially dangerous commands
+                # Check if command targets files outside project directory
+                is_outside, external_path = is_command_targeting_outside_project(command, cwd)
+
+                # Minimal whitelist for truly dangerous commands
                 dangerous_prefixes = [
-                    "rm",
-                    "mv",
-                    "cp",
-                    "sudo",
-                    "chmod",
-                    "chown",
-                    ">",
-                    "curl",
-                    "wget",
+                    "rm",  # File deletion
+                    "sudo",  # Admin privileges
+                    "chmod",  # Permission changes
+                    "chown",  # Ownership changes
+                    "mv",  # File moving (can overwrite)
                 ]
-                if any(prefix in command for prefix in dangerous_prefixes):
+
+                is_dangerous = any(
+                    command.strip().startswith(prefix) for prefix in dangerous_prefixes
+                )
+
+                # Send notification if command is dangerous OR targets external files
+                if is_dangerous or is_outside:
                     event_type = "tool_activity"
                     # Extract the command and first argument for cleaner message
                     # Split only up to pipe to avoid getting arguments from piped commands
@@ -895,14 +959,30 @@ class NotificationHandler:
                     # Apply command replacements for TTS
                     audio_desc = apply_command_replacement(audio_desc, replacements)
 
-                    # Build messages
-                    if target and len(target) < 50:  # Sanity check on target length
+                    # Build messages with special handling for external files
+                    if is_outside and external_path:
+                        # Special messaging for external file operations
+                        if (
+                            external_path.startswith("/etc/")
+                            or external_path.startswith("/usr/")
+                            or external_path.startswith("/var/")
+                        ):
+                            message = f"[{display_project_name}] Accessing system file: {Path(external_path).name}"
+                            custom_tts = (
+                                f"{tts_project_name}, accessing system file outside project"
+                            )
+                        else:
+                            message = f"[{display_project_name}] Accessing external file: {Path(external_path).name}"
+                            custom_tts = f"{tts_project_name}, accessing file outside project"
+                    elif target and len(target) < 50:  # Sanity check on target length
                         message = f"[{display_project_name}] Running {cmd_summary} on {target}"
+                        custom_tts = f"{tts_project_name}, {audio_desc}"
                     else:
                         message = f"[{display_project_name}] Running {cmd_summary}"
-
-                    # Natural TTS message
-                    custom_tts = f"{tts_project_name}, {audio_desc}"
+                        custom_tts = f"{tts_project_name}, {audio_desc}"
+                else:
+                    # Command is neither dangerous nor targeting external files - skip notification
+                    return
 
             # Skip most file edits unless they're system files
             elif tool_name in ["Write", "MultiEdit", "Edit"]:
